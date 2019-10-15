@@ -7,6 +7,7 @@ The easy way to download curves from an oscilloscope.
 <a href="https://www.python.org"><img alt="Python: 3.4+" src="https://img.shields.io/badge/Python-3.4+-Green.svg"></a>
 <a href="https://github.com/psf/black"><img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-000000.svg"></a>
 <a href="https://www.codefactor.io/repository/github/tektronix/curvequery"><img src="https://www.codefactor.io/repository/github/tektronix/curvequery/badge" alt="CodeFactor" /></a>
+<a href="https://lgtm.com/projects/g/tektronix/curvequery/alerts/"><img alt="Total alerts" src="https://img.shields.io/lgtm/alerts/g/tektronix/curvequery.svg?logo=lgtm&logoWidth=18"/></a>
 <a href="https://github.com/tektronix"><img alt="Tektronix" src="https://tektronix.github.io/media/TEK-opensource_badge.svg"></a> 
 </p>
 
