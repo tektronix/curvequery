@@ -13,6 +13,8 @@ The easy way to download curves from an oscilloscope.
 The curvequery package is a collection of tools to simplify downloading waveform data from an oscilloscope.
 It is a layer of functionality built on top of the PyVISA package.
 
+Maintainer: [Chad Stryker](https://github.com/cwstryker)
+
 
 ## Usage
 
