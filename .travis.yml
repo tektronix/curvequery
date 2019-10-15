@@ -1,0 +1,6 @@
+language: python
+python:
+  - "3.4"
+# command to run build
+script:
+  - python setup.py sdist
