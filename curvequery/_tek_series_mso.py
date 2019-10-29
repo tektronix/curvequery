@@ -197,9 +197,12 @@ class TekSeriesCurveFeat(FeatureBase):
                 instr.write("curv?")
 
                 # Read the waveform data sent by the instrument
-                source_data = instr.read_binary_values(
-                    datatype=datatype, is_big_endian=True, expect_termination=True
-                )
+                try:
+                    source_data = instr.read_binary_values(
+                        datatype=datatype, is_big_endian=True, expect_termination=True)
+                except Exception:
+                    print("Error: No waveform data found. Check waveform on scope.")
+                    continue
 
                 # Normal analog channels must have the vertical scale and offset applied
                 if wave_type is WaveType.ANALOG:
