@@ -1,4 +1,3 @@
-from collections import namedtuple
 from enum import Enum
 from enum import unique
 from time import sleep
@@ -12,32 +11,6 @@ from .api_types import Waveform
 from .api_types import SequenceTimeout
 from .helper_methods import _disabled_pbar
 
-# noinspection SpellCheckingInspection
-WaveformOutPre = namedtuple(
-    "WaveformOutPre",
-    [
-        "IGN1",
-        "IGN2",
-        "IGN3",
-        "IGN4",
-        "IGN5",
-        "IGN6",
-        "IGN7",
-        "IGN8",
-        "IGN9",
-        "IGN10",
-        "XUNIT",
-        "XINCR",
-        "XZERO",
-        "PT_OFF",
-        "IGN15",
-        "IGN16",
-        "IGN17",
-        "IGN18",
-        "IGN19",
-        "IGN20",
-    ],
-)
 
 try:
     # noinspection PyUnresolvedReferences,PyPackageRequirements
@@ -114,10 +87,14 @@ class TekSeriesCurveFeat(FeatureBase):
 
     @staticmethod
     def _get_xscale(instr):
-        pre = WaveformOutPre(*tuple(instr.query("WFMOutpre?").strip().split(";")))
-        slope = float(pre.XINCR)
-        offset = float(pre.PT_OFF) * -slope + float(pre.XZERO)
-        unit = pre.XUNIT.strip('"')
+        xincr = instr.query("WFMOutpre:XINCR?").strip()
+        pt_off = instr.query("WFMOutpre:PT_OFF?").strip()
+        xzero = instr.query("WFMOutpre:XZERO?").strip()
+        xunit = instr.query("WFMOutpre:XUNIT?").strip()
+
+        slope = float(xincr)
+        offset = float(pt_off) * -slope + float(xzero)
+        unit = xunit.strip('"')
         return XScale(slope, offset, unit)
 
     @staticmethod
