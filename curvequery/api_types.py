@@ -28,8 +28,6 @@ class CurveQueryError(VisaResourceError):
 class SequenceTimeout(Exception):
     """Raised when an acquisition does not finish in the specified time out period"""
 
-    pass
-
 
 class PyVisaTimeoutError(Exception):
     """

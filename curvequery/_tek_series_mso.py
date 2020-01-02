@@ -66,11 +66,12 @@ class TekSeriesCurveFeat(FeatureBase):
     @staticmethod
     def _classify_waveform(source):
         if source[0:4] == "MATH":
-            return WaveType.MATH
+            wave_type = WaveType.MATH
         elif "_" in source:
-            return WaveType.DIGITAL
+            wave_type = WaveType.DIGITAL
         else:
-            return WaveType.ANALOG
+            wave_type = WaveType.ANALOG
+        return wave_type
 
     @staticmethod
     def _has_data_available(instr, source):
