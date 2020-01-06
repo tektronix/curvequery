@@ -1,5 +1,5 @@
 from collections import namedtuple
-
+import pyvisa
 
 Identity = namedtuple("Identity", "company, model, serial, config")
 XScale = namedtuple("XScale", "slope, offset, unit")
@@ -27,46 +27,6 @@ class CurveQueryError(VisaResourceError):
 
 class SequenceTimeout(Exception):
     """Raised when an acquisition does not finish in the specified time out period"""
-
-
-class PyVisaTimeoutError(Exception):
-    """
-    Exception raised when a socket time out occurs.
-
-    Attributes:
-        status (int or None): The status word
-        event_status (int or None): The event status word
-        events (TBD or None): TBD
-    """
-
-    def __init__(self, message, status=None, event_status=None, events=None):
-        """
-        The constructor for PyVisaTimeoutError.
-
-        Parameters:
-            message (str): A description of the time out circumstances.
-            status (int [optional]): The status word
-            event_status (int [optional]): The event status word
-            events (TBD [optional]): TBD
-        """
-        self.status = status
-        self.event_status = event_status
-        self.events = events
-        super().__init__(self, message)
-
-    def __str__(self):
-        stb_str = "Status Byte:   None"
-        if self.status is not None:
-            stb_str = "Status Byte:    0x{0:0>2X}".format(self.status)
-        esr_str = "Event Status:   None"
-        if self.event_status is not None:
-            esr_str = "Event Status:   0x{0:0>2X}".format(self.event_status)
-        evt_str = "Events: None"
-        if self.events is not None:
-            events_data = ["{}: {}".format(n, d) for n, d in self.events]
-            events_body = "\n                ".join(events_data)
-            evt_str = "Events:         {}".format(events_body)
-        return "\n".join([Exception.__str__(self), stb_str, esr_str, evt_str])
 
 
 class WaveformCollection:
@@ -111,7 +71,34 @@ class FeatureBase:
         This __call__method should not be subclassed. This method calls the action_fcn method.
         """
 
-        with self.parent_instr_obj.rsrc_mgr.open_resource(
-            self.parent_instr_obj.rsrc_name
-        ) as instr:
-            return self.action_fcn(instr, *args, **kwargs)
+        try:
+            with self.parent_instr_obj.rsrc_mgr.open_resource(
+                self.parent_instr_obj.rsrc_name
+            ) as instr:
+                return self.action_fcn(instr, *args, **kwargs)
+        except pyvisa.errors.VisaIOError:
+            _timeout_handler(
+                self.parent_instr_obj.rsrc_mgr, self.parent_instr_obj.rsrc_name
+            )
+            raise
+
+
+def _timeout_handler(rsrc_mgr, rsrc_name):
+    with rsrc_mgr.open_resource(rsrc_name) as instr:
+        instr.clear()
+        print("VISA Timeout Exception Handler:")
+        print("  Status Byte (SBR) Register: {}".format(instr.query("*STB?").strip()))
+        print(
+            "  Standard Event Status (SESR) Register: {}".format(
+                instr.query("*ESR?").strip()
+            )
+        )
+        events = []
+        for _ in range(10):
+            event = instr.query("EVMSG?").strip()
+            num, msg = tuple(event.split(","))
+            if num == "0":
+                break
+            events.append(num)
+            print("  Event: {}".format(event))
+    return events

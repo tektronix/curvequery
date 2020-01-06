@@ -17,6 +17,7 @@ def _ident(resource_name, resource_manager):
 
     # open a connection and fetch the instrument IDN string
     with resource_manager.open_resource(resource_name) as inst:
+        inst.clear()
         idn = inst.query("*IDN?").strip()
     return _identity_parser(idn)
 

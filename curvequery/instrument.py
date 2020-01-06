@@ -1,5 +1,8 @@
+import pyvisa
+
 from .api_types import Identity
 from .api_types import CompatibilityError
+from .api_types import _timeout_handler
 from .helper_methods import _ident
 from .helper_methods import _get_handler
 
@@ -32,15 +35,34 @@ class Instrument:
         setattr(self, name, func)
         self._features.append(name)
 
+    def _timeout_handler(self):
+        with self.rsrc_mgr.open_resource(self.rsrc_name) as instr:
+            instr.clear()
+            print("SESR: {}".format(instr.query("*ESR?").strip()))
+            for _ in range(10):
+                event = instr.query("EVMSG?").strip()
+                num, msg = tuple(event.split(","))
+                if num == "0":
+                    break
+                print("Event: {}".format(event))
+
     def write(self, *args, **kwargs):
         """Writes a command to the instrument"""
-        with self.rsrc_mgr.open_resource(self.rsrc_name) as instr:
-            instr.write(*args, **kwargs)
+        try:
+            with self.rsrc_mgr.open_resource(self.rsrc_name) as instr:
+                instr.write(*args, **kwargs)
+        except pyvisa.errors.VisaIOError:
+            _timeout_handler(self.rsrc_mgr, self.rsrc_name)
+            raise
 
     def query(self, *args, **kwargs):
         """Retrieves data from the instrument"""
-        with self.rsrc_mgr.open_resource(self.rsrc_name) as instr:
-            return instr.query(*args, **kwargs)
+        try:
+            with self.rsrc_mgr.open_resource(self.rsrc_name) as instr:
+                return instr.query(*args, **kwargs)
+        except pyvisa.errors.VisaIOError:
+            _timeout_handler(self.rsrc_mgr, self.rsrc_name)
+            raise
 
 
 def instrument_factory(
