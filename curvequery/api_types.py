@@ -1,5 +1,4 @@
 from collections import namedtuple
-import pyvisa
 
 Identity = namedtuple("Identity", "company, model, serial, config")
 XScale = namedtuple("XScale", "slope, offset, unit")
@@ -71,34 +70,8 @@ class FeatureBase:
         This __call__method should not be subclassed. This method calls the action_fcn method.
         """
 
-        try:
-            with self.parent_instr_obj.rsrc_mgr.open_resource(
-                self.parent_instr_obj.rsrc_name
-            ) as instr:
-                return self.action_fcn(instr, *args, **kwargs)
-        except pyvisa.errors.VisaIOError:
-            _timeout_handler(
-                self.parent_instr_obj.rsrc_mgr, self.parent_instr_obj.rsrc_name
-            )
-            raise
-
-
-def _timeout_handler(rsrc_mgr, rsrc_name):
-    with rsrc_mgr.open_resource(rsrc_name) as instr:
-        instr.clear()
-        print("VISA Timeout Exception Handler:")
-        print("  Status Byte (SBR) Register: {}".format(instr.query("*STB?").strip()))
-        print(
-            "  Standard Event Status (SESR) Register: {}".format(
-                instr.query("*ESR?").strip()
-            )
-        )
-        events = []
-        for _ in range(10):
-            event = instr.query("EVMSG?").strip()
-            num, msg = tuple(event.split(","))
-            if num == "0":
-                break
-            events.append(num)
-            print("  Event: {}".format(event))
-    return events
+        with self.parent_instr_obj.rsrc_mgr.open_resource(
+            self.parent_instr_obj.rsrc_name
+        ) as instr:
+            instr.timeout = self.parent_instr_obj.timeout
+            return self.action_fcn(instr, *args, **kwargs)

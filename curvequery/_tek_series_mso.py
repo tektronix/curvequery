@@ -3,6 +3,8 @@ from enum import unique
 from time import sleep
 from time import time
 
+import pyvisa
+
 from .api_types import XScale
 from .api_types import YScale
 from .api_types import WaveformCollection
@@ -11,6 +13,7 @@ from .api_types import Waveform
 from .api_types import SequenceTimeout
 from .helper_methods import _disabled_pbar
 
+MAX_SLEEP_DELAY = 1
 
 try:
     # noinspection PyUnresolvedReferences,PyPackageRequirements
@@ -169,68 +172,80 @@ class TekSeriesCurveFeat(FeatureBase):
                 instr.write("WFMOUTPRE:BIT_NR {}".format(bit_nr))
 
                 # Horizontal scale information
-                x_scale = self._get_xscale(instr)
+                # This function will generate a VISA timeout if there is no waveform data available
+                # and the channel is enabled.
+                try:
+                    x_scale = self._get_xscale(instr)
 
-                # Issue the curve query command
-                instr.write("curv?")
+                except pyvisa.errors.VisaIOError:
+                    # Flush out the VISA interface event queue
+                    timeout_handler(instr, verbose=False)
 
-                # Read the waveform data sent by the instrument
-                source_data = instr.read_binary_values(
-                    datatype=datatype, is_big_endian=True, expect_termination=True
-                )
-
-                # Normal analog channels must have the vertical scale and offset applied
-                if wave_type is WaveType.ANALOG:
-                    offset = float(instr.query("WFMOutpre:YZEro?"))
-                    scale = float(instr.query("WFMOutpre:YMUlt?"))
-                    source_data = [scale * i + offset for i in source_data]
-
-                # Format and return the result
-                if wave_type is WaveType.DIGITAL:
-
-                    # Digital channel to be decomposed into separate bits
-                    if decompose_dch:
-                        for bit in range(8):
-                            bit_channel = "{}_D{}".format(source.split("_")[0], bit)
-
-                            # if the bit channel is available, decompose the data
-                            if bit_channel in sources:
-                                bit_data = [(i >> (2 * bit)) & 1 for i in source_data]
-                                yield (bit_channel, bit_data, x_scale, None)
-
-                    # Digital channel to be converted into an 8-bit word
-                    else:
-                        digital = []
-                        for i in source_data:
-                            a = (
-                                (i & 0x4000) >> 7
-                                | (i & 0x1000) >> 6
-                                | (i & 0x400) >> 5
-                                | (i & 0x100) >> 4
-                                | (i & 0x40) >> 3
-                                | (i & 0x10) >> 2
-                                | (i & 0x4) >> 1
-                                | i & 0x1
-                            )
-                            digital.append(a)
-                            yield (source.split("_")[0], digital, x_scale, None)
-
-                elif wave_type is WaveType.ANALOG:
-                    # Include y-scale information with analog channel waveforms
-                    y_scale = self._get_yscale(instr, source)
-                    yield (source, source_data, x_scale, y_scale)
-
-                elif wave_type is WaveType.MATH:
-                    # Y-scale information for MATH channels is not supported at this time
-                    yield (source, source_data, x_scale, None)
-
+                # Otherwise, complete the curve query
                 else:
-                    raise Exception(
-                        "It should have been impossible to execute this code"
+
+                    # Issue the curve query command
+                    instr.write("curv?")
+
+                    # Read the waveform data sent by the instrument
+                    source_data = instr.read_binary_values(
+                        datatype=datatype, is_big_endian=True, expect_termination=True
                     )
 
-                # Keep track of each super channel and math source that has been handled
-                downloaded_sources.append(source.split("_")[0])
+                    # Normal analog channels must have the vertical scale and offset applied
+                    if wave_type is WaveType.ANALOG:
+                        offset = float(instr.query("WFMOutpre:YZEro?"))
+                        scale = float(instr.query("WFMOutpre:YMUlt?"))
+                        source_data = [scale * i + offset for i in source_data]
+
+                    # Format and return the result
+                    if wave_type is WaveType.DIGITAL:
+
+                        # Digital channel to be decomposed into separate bits
+                        if decompose_dch:
+                            for bit in range(8):
+                                bit_channel = "{}_D{}".format(source.split("_")[0], bit)
+
+                                # if the bit channel is available, decompose the data
+                                if bit_channel in sources:
+                                    bit_data = [
+                                        (i >> (2 * bit)) & 1 for i in source_data
+                                    ]
+                                    yield (bit_channel, bit_data, x_scale, None)
+
+                        # Digital channel to be converted into an 8-bit word
+                        else:
+                            digital = []
+                            for i in source_data:
+                                a = (
+                                    (i & 0x4000) >> 7
+                                    | (i & 0x1000) >> 6
+                                    | (i & 0x400) >> 5
+                                    | (i & 0x100) >> 4
+                                    | (i & 0x40) >> 3
+                                    | (i & 0x10) >> 2
+                                    | (i & 0x4) >> 1
+                                    | i & 0x1
+                                )
+                                digital.append(a)
+                                yield (source.split("_")[0], digital, x_scale, None)
+
+                    elif wave_type is WaveType.ANALOG:
+                        # Include y-scale information with analog channel waveforms
+                        y_scale = self._get_yscale(instr, source)
+                        yield (source, source_data, x_scale, y_scale)
+
+                    elif wave_type is WaveType.MATH:
+                        # Y-scale information for MATH channels is not supported at this time
+                        yield (source, source_data, x_scale, None)
+
+                    else:
+                        raise Exception(
+                            "It should have been impossible to execute this code"
+                        )
+
+                    # Keep track of each super channel and math source that has been handled
+                    downloaded_sources.append(source.split("_")[0])
 
         # Restore the acquisition state
         instr.write("ACQuire:STATE {}".format(acq_state))
@@ -329,3 +344,23 @@ class TekSeriesAcquireFeat(FeatureBase):
 
         # Restore the acquisition state
         restore()
+
+
+def timeout_handler(instr, verbose=True):
+    sleep(MAX_SLEEP_DELAY)
+    instr.clear()
+    if verbose:
+        print("VISA Timeout Exception Handler:")
+        print("  Status Byte (SBR) Register: {}".format(instr.query("*STB?").strip()))
+        print(
+            "  Standard Event Status (SESR) Register: {}".format(
+                instr.query("*ESR?").strip()
+            )
+        )
+    for _ in range(10):
+        event = instr.query("EVMSG?").strip()
+        num, msg = tuple(event.split(","))
+        if num == "0":
+            break
+        if verbose:
+            print("  Event: {}".format(event))

@@ -1,21 +1,21 @@
-import pyvisa
-
 from .api_types import Identity
 from .api_types import CompatibilityError
-from .api_types import _timeout_handler
 from .helper_methods import _ident
 from .helper_methods import _get_handler
 
 
 class Instrument:
-    def __init__(self, resource_name, resource_manager, identity=None):
+    def __init__(self, resource_name, resource_manager, identity, timeout):
         self.rsrc_name = resource_name
         self.rsrc_mgr = resource_manager
+        self.timeout = timeout
         if isinstance(identity, Identity):
             self._identity = identity
         else:
             self._identity = _ident(
-                resource_name=resource_name, resource_manager=resource_manager
+                resource_name=resource_name,
+                resource_manager=resource_manager,
+                timeout=timeout,
             )
         self._features = []
 
@@ -35,38 +35,21 @@ class Instrument:
         setattr(self, name, func)
         self._features.append(name)
 
-    def _timeout_handler(self):
-        with self.rsrc_mgr.open_resource(self.rsrc_name) as instr:
-            instr.clear()
-            print("SESR: {}".format(instr.query("*ESR?").strip()))
-            for _ in range(10):
-                event = instr.query("EVMSG?").strip()
-                num, msg = tuple(event.split(","))
-                if num == "0":
-                    break
-                print("Event: {}".format(event))
-
     def write(self, *args, **kwargs):
         """Writes a command to the instrument"""
-        try:
-            with self.rsrc_mgr.open_resource(self.rsrc_name) as instr:
-                instr.write(*args, **kwargs)
-        except pyvisa.errors.VisaIOError:
-            _timeout_handler(self.rsrc_mgr, self.rsrc_name)
-            raise
+        with self.rsrc_mgr.open_resource(self.rsrc_name) as instr:
+            instr.timeout = self.timeout
+            instr.write(*args, **kwargs)
 
     def query(self, *args, **kwargs):
         """Retrieves data from the instrument"""
-        try:
-            with self.rsrc_mgr.open_resource(self.rsrc_name) as instr:
-                return instr.query(*args, **kwargs)
-        except pyvisa.errors.VisaIOError:
-            _timeout_handler(self.rsrc_mgr, self.rsrc_name)
-            raise
+        with self.rsrc_mgr.open_resource(self.rsrc_name) as instr:
+            instr.timeout = self.timeout
+            return instr.query(*args, **kwargs)
 
 
 def instrument_factory(
-    *, resource_name, resource_manager, instrument_cls, identity_override
+    *, resource_name, resource_manager, instrument_cls, identity_override, timeout
 ):
     """
     Dynamically constructs and returns an instrument object associated with the given
@@ -87,7 +70,7 @@ def instrument_factory(
 
     # create a new empty instrument object for the target instrument
     inst_obj = instrument_cls(
-        resource_name, resource_manager, identity=identity_override
+        resource_name, resource_manager, identity=identity_override, timeout=timeout
     )
     idn = inst_obj.idn
 
@@ -95,6 +78,7 @@ def instrument_factory(
     # to the instrument object. This only used for better error reporting if an
     # CompatibilityError exception is raised in the _get_handler() function.
     with resource_manager.open_resource(resource_name) as connection:
+        connection.timeout = timeout
 
         # Find the features associated with the target instrument using the feature
         # tables assigned to the specified Instrument object subclass

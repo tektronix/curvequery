@@ -7,7 +7,7 @@ def _identity_parser(idn_str):
     return Identity(*idn)
 
 
-def _ident(resource_name, resource_manager):
+def _ident(resource_name, resource_manager, timeout):
 
     # If not provided, create a pyvisa ResourceManager object
     if not resource_manager:
@@ -17,6 +17,7 @@ def _ident(resource_name, resource_manager):
 
     # open a connection and fetch the instrument IDN string
     with resource_manager.open_resource(resource_name) as inst:
+        inst.timeout = timeout
         inst.clear()
         idn = inst.query("*IDN?").strip()
     return _identity_parser(idn)
