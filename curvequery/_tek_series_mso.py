@@ -13,7 +13,8 @@ from .api_types import Waveform
 from .api_types import SequenceTimeout
 from .helper_methods import _disabled_pbar
 
-MAX_SLEEP_DELAY = 1
+UNLOCK_DELAY = 0.01
+MAX_EVENTS = 33
 
 try:
     # noinspection PyUnresolvedReferences,PyPackageRequirements
@@ -36,8 +37,12 @@ class TekSeriesDefaultFeat(FeatureBase):
 
     @staticmethod
     def action_fcn(instr):
-        instr.write("*RST")
-        instr.query("*OPC?")
+        try:
+            instr.write("*RST")
+            instr.query("*OPC?")
+        except pyvisa.errors.VisaIOError:
+            get_event_queue(instr)
+            raise
 
 
 class TekSeriesCurveFeat(FeatureBase):
@@ -58,12 +63,16 @@ class TekSeriesCurveFeat(FeatureBase):
         result = WaveformCollection()
 
         # iterate through all available sources
-        for ch, ch_data, x_scale, y_scale in self._get_data(
-            instr, self._list_sources(instr), **kwargs
-        ):
-            if verbose:
-                print(ch)
-            result.data[ch] = Waveform(ch_data, x_scale, y_scale)
+        try:
+            for ch, ch_data, x_scale, y_scale in self._get_data(
+                instr, self._list_sources(instr), **kwargs
+            ):
+                if verbose:
+                    print(ch)
+                result.data[ch] = Waveform(ch_data, x_scale, y_scale)
+        except pyvisa.errors.VisaIOError:
+            get_event_queue(instr)
+            raise
         return result
 
     @staticmethod
@@ -161,6 +170,9 @@ class TekSeriesCurveFeat(FeatureBase):
             # Digital supper channels will produce 8 sources each
             if source.split("_")[0] not in downloaded_sources:
 
+                # Keep track of each super channel and math source that has been handled
+                downloaded_sources.append(source.split("_")[0])
+
                 # Determine the type of waveform and set key interface parameters
                 wave_type = self._classify_waveform(source)
                 channel = channel_table[wave_type](source)
@@ -179,7 +191,7 @@ class TekSeriesCurveFeat(FeatureBase):
 
                 except pyvisa.errors.VisaIOError:
                     # Flush out the VISA interface event queue
-                    timeout_handler(instr, verbose=False)
+                    get_event_queue(instr, verbose=False)
 
                 # Otherwise, complete the curve query
                 else:
@@ -243,9 +255,6 @@ class TekSeriesCurveFeat(FeatureBase):
                         raise Exception(
                             "It should have been impossible to execute this code"
                         )
-
-                    # Keep track of each super channel and math source that has been handled
-                    downloaded_sources.append(source.split("_")[0])
 
         # Restore the acquisition state
         instr.write("ACQuire:STATE {}".format(acq_state))
@@ -346,21 +355,52 @@ class TekSeriesAcquireFeat(FeatureBase):
         restore()
 
 
-def timeout_handler(instr, verbose=True):
-    sleep(MAX_SLEEP_DELAY)
+def get_event_queue(instr, verbose=True):
+    """This function queries events from the Event Queue and optionally prints the events on stdout"""
+    events = []
+
+    # An race condition will sometimes create a secondary timeout error
+    # This short delay seems to fix the issue
+    sleep(UNLOCK_DELAY)
+
+    # Reset the VISA interface and capture the Status Byte contents
     instr.clear()
+    sbr = instr.query("*STB?").strip()
+
+    # Load events into the Event Queue
+    sesr = instr.query("*ESR?").strip()
+
+    # Optionally print data to stdout
     if verbose:
         print("VISA Timeout Exception Handler:")
-        print("  Status Byte (SBR) Register: {}".format(instr.query("*STB?").strip()))
-        print(
-            "  Standard Event Status (SESR) Register: {}".format(
-                instr.query("*ESR?").strip()
-            )
-        )
-    for _ in range(10):
-        event = instr.query("EVMSG?").strip()
-        num, msg = tuple(event.split(","))
+        print("  Status Byte (SBR) Register: {}".format(sbr))
+        print("  Standard Event Status (SESR) Register: {}".format(sesr))
+
+    # Download the events from the Event Queue, one at a time, up to the size of the Event Queue
+    for _ in range(MAX_EVENTS):
+
+        # After a short delay, download a single event and split it into a number and a description
+        sleep(UNLOCK_DELAY)
+        events.append(instr.query("EVMSG?").strip())
+        num, msg = tuple(events[-1].split(","))
+
+        # A '1' denotes that the Event Queue is empty but more events are available
+        if num == "1":
+
+            # After a short delay, load more events into the Event Queue and optionally print the
+            # SESR register contents to stdout
+            sleep(UNLOCK_DELAY)
+            sesr = instr.query("*ESR?").strip()
+            if verbose:
+                print("  Standard Event Status (SESR) Register: {}".format(sesr))
+
+        # A '0' denotes that there are no more events waiting on the instrument
         if num == "0":
             break
+
+        # Optionally, print the event to stdout
         if verbose:
-            print("  Event: {}".format(event))
+            print("  Event: {}".format(events[-1]))
+
+    # Return a list of all events captured from the Event Queue
+    return events
