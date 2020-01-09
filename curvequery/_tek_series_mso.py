@@ -100,15 +100,30 @@ class TekSeriesCurveFeat(FeatureBase):
 
     @staticmethod
     def _get_xscale(instr):
-        xincr = instr.query("WFMOutpre:XINCR?").strip()
-        pt_off = instr.query("WFMOutpre:PT_OFF?").strip()
-        xzero = instr.query("WFMOutpre:XZERO?").strip()
-        xunit = instr.query("WFMOutpre:XUNIT?").strip()
+        """Get the horizontal scale of the instrument"""
 
-        slope = float(xincr)
-        offset = float(pt_off) * -slope + float(xzero)
-        unit = xunit.strip('"')
-        return XScale(slope, offset, unit)
+        # This function will generate a VISA timeout if there is no waveform data available
+        # and the channel is enabled.
+        try:
+            xincr = instr.query("WFMOutpre:XINCR?").strip()
+        except pyvisa.errors.VisaIOError:
+
+            # Flush out the VISA interface event queue
+            get_event_queue(instr, verbose=False)
+            result = None
+        else:
+
+            # collect more horizontal data
+            pt_off = instr.query("WFMOutpre:PT_OFF?").strip()
+            xzero = instr.query("WFMOutpre:XZERO?").strip()
+            xunit = instr.query("WFMOutpre:XUNIT?").strip()
+
+            # calculate horizontal scale
+            slope = float(xincr)
+            offset = float(pt_off) * -slope + float(xzero)
+            unit = xunit.strip('"')
+            result = XScale(slope, offset, unit)
+        return result
 
     @staticmethod
     def _get_yscale(instr, source):
@@ -184,17 +199,8 @@ class TekSeriesCurveFeat(FeatureBase):
                 instr.write("WFMOUTPRE:BIT_NR {}".format(bit_nr))
 
                 # Horizontal scale information
-                # This function will generate a VISA timeout if there is no waveform data available
-                # and the channel is enabled.
-                try:
-                    x_scale = self._get_xscale(instr)
-
-                except pyvisa.errors.VisaIOError:
-                    # Flush out the VISA interface event queue
-                    get_event_queue(instr, verbose=False)
-
-                # Otherwise, complete the curve query
-                else:
+                x_scale = self._get_xscale(instr)
+                if x_scale is not None:
 
                     # Issue the curve query command
                     instr.write("curv?")
