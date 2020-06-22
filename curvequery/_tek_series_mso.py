@@ -168,6 +168,11 @@ class TekSeriesCurveFeat(FeatureBase):
                 instr.write("data:encdg {}".format(encoding))
                 instr.write("WFMOUTPRE:BIT_NR {}".format(bit_nr))
 
+                # Set the start and stop point of the record
+                rec_len = instr.query("horizontal:recordlength?").strip()
+                instr.write("data:start 1")
+                instr.write("data:stop {}").format(rec_len)
+
                 # Horizontal scale information
                 x_scale = self._get_xscale(instr)
 
