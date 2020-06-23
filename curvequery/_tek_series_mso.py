@@ -6,10 +6,11 @@ from time import time
 from .api_types import XScale
 from .api_types import YScale
 from .api_types import WaveformCollection
-from .api_types import FeatureBase
 from .api_types import Waveform
 from .api_types import SequenceTimeout
 from .helper_methods import _disabled_pbar
+
+from visadore import base
 
 
 try:
@@ -26,42 +27,36 @@ class WaveType(Enum):
     MATH = 3
 
 
-class TekSeriesDefaultFeat(FeatureBase):
-    """
-    Performs a default setup and waits for the operation to finish
-    """
-
-    @staticmethod
-    def action_fcn(instr):
-        instr.write("*RST")
-        instr.query("*OPC?")
+class TekSeriesDefaultFeat(base.FeatureBase):
+    def feature(self):
+        """Performs a default setup and waits for the operation to finish"""
+        with self.resource_manager.open_resource(self.resource_name) as inst:
+            inst.write("*RST")
+            inst.query("*OPC?")
 
 
-class TekSeriesCurveFeat(FeatureBase):
-    """
-    Returns a WaveformCollection object containing waveform data available on the instrument.
-
-    Parameters:
-        use_pbar (bool): Optionally display a progress bar. (default: False)
-        decompose_dch (bool): Optionally convert a DCH channel into eight separate
-            1-bit channels. (default: True)
-    """
-
-    def action_fcn(self, instr, *, verbose=False, **kwargs):
+class TekSeriesCurveFeat(base.FeatureBase):
+    def feature(self, *, use_pbar=False, decompose_dch=True, verbose=False):
         """
-        Action Function
+        Returns a WaveformCollection object containing waveform data available on the instrument.
+
+        Parameters:
+            use_pbar (bool): Optionally display a progress bar. (default: False)
+            decompose_dch (bool): Optionally convert a DCH channel into eight separate
+                1-bit channels. (default: True)
+            verbose (bool): Display additional information
         """
+        with self.resource_manager.open_resource(self.resource_name) as inst:
+            result = WaveformCollection()
 
-        result = WaveformCollection()
-
-        # iterate through all available sources
-        for ch, ch_data, x_scale, y_scale in self._get_data(
-            instr, self._list_sources(instr), **kwargs
-        ):
-            if verbose:
-                print(ch)
-            result.data[ch] = Waveform(ch_data, x_scale, y_scale)
-        return result
+            # iterate through all available sources
+            for ch, ch_data, x_scale, y_scale in self._get_data(
+                inst, self._list_sources(inst), use_pbar, decompose_dch
+            ):
+                if verbose:
+                    print(ch)
+                result.data[ch] = Waveform(ch_data, x_scale, y_scale)
+            return result
 
     @staticmethod
     def _classify_waveform(source):
@@ -124,7 +119,7 @@ class TekSeriesCurveFeat(FeatureBase):
         ]
         return useful_waveforms
 
-    def _get_data(self, instr, sources, use_pbar=False, decompose_dch=True):
+    def _get_data(self, instr, sources, use_pbar, decompose_dch):
         """Returns an iterator that yields the source data from the oscilloscope"""
 
         encoding_table = {
@@ -201,7 +196,7 @@ class TekSeriesCurveFeat(FeatureBase):
                             # if the bit channel is available, decompose the data
                             if bit_channel in sources:
                                 bit_data = [(i >> (2 * bit)) & 1 for i in source_data]
-                                yield (bit_channel, bit_data, x_scale, None)
+                                yield bit_channel, bit_data, x_scale, None
 
                     # Digital channel to be converted into an 8-bit word
                     else:
@@ -218,16 +213,16 @@ class TekSeriesCurveFeat(FeatureBase):
                                 | i & 0x1
                             )
                             digital.append(a)
-                            yield (source.split("_")[0], digital, x_scale, None)
+                            yield source.split("_")[0], digital, x_scale, None
 
                 elif wave_type is WaveType.ANALOG:
                     # Include y-scale information with analog channel waveforms
                     y_scale = self._get_yscale(instr, source)
-                    yield (source, source_data, x_scale, y_scale)
+                    yield source, source_data, x_scale, y_scale
 
                 elif wave_type is WaveType.MATH:
                     # Y-scale information for MATH channels is not supported at this time
-                    yield (source, source_data, x_scale, None)
+                    yield source, source_data, x_scale, None
 
                 else:
                     raise Exception(
@@ -241,89 +236,82 @@ class TekSeriesCurveFeat(FeatureBase):
         instr.write("ACQuire:STATE {}".format(acq_state))
 
 
-class TekSeriesSetupFeat(FeatureBase):
-    """
-    Returns the setup configuration from the instrument as a string.
-    """
-
-    @staticmethod
-    def action_fcn(instr, settings=None):
+class TekSeriesSetupFeat(base.FeatureBase):
+    def feature(self, settings=None):
         """
-        Action Function
+        Returns the setup configuration from the instrument as a string.
         """
+        with self.resource_manager.open_resource(self.resource_name) as inst:
+            inst.timeout = 20000
+            if settings:
+                inst.write("{:s}".format(settings))
+                inst.query("*OPC?")
+            else:
+                return inst.query("SET?")
 
-        instr.timeout = 20000
-        if settings:
-            instr.write("{:s}".format(settings))
-            instr.query("*OPC?")
-        else:
-            return instr.query("SET?")
 
-
-class TekSeriesAcquireFeat(FeatureBase):
-    """
-    Returns a generator object that runs a single sequence of the acquisition
-        system for each iteration. If the count argument evaluates as True, the
-        generator yields the count on each iteration.
-
-    Parameters:
-        count (int or None): The number of acquisitions to sequence. If None, sequence
-            acquisitions indefinitely. (default: None)
-        timeout (int or None): The number of seconds to wait for an acquisition to
-            complete. If None, wait indefinitely. (default: None)
-        restore_state (bool): Optionally save and restore the acquisition state of the
-            instrument. (default: True)
-    """
-
-    def action_fcn(self, _, *, count=None, timeout=None, restore_state=True):
+class TekSeriesAcquireFeat(base.FeatureBase):
+    def feature(self, *, count=None, timeout=None, restore_state=True):
         """
-        Action Function
+        Returns a generator object that runs a single sequence of the acquisition
+            system for each iteration. If the count argument evaluates as True, the
+            generator yields the count on each iteration.
+
+        Parameters:
+            count (int or None): The number of acquisitions to sequence. If None, sequence
+                acquisitions indefinitely. (default: None)
+            timeout (int or None): The number of seconds to wait for an acquisition to
+                complete. If None, wait indefinitely. (default: None)
+            restore_state (bool): Optionally save and restore the acquisition state of the
+                instrument. (default: True)
         """
 
-        def restore():
+        def restore(instr, enabled):
             """This helper function restores the acquisition state, if enabled"""
-            if restore_state:
-                self.parent_instr_obj.write(
-                    "ACQUIRE:STOPAFTER {}".format(acq_stopafter)
-                )
-                self.parent_instr_obj.write("ACQUIRE:STATE {}".format(acq_state))
+            if enabled:
+                instr.write("ACQUIRE:STOPAFTER {}".format(acq_stopafter))
+                instr.write("ACQUIRE:STATE {}".format(acq_state))
 
-        # Save the state of the acquisition system
-        acq_stopafter = self.parent_instr_obj.query("ACQUIRE:STOPAFTER?")
-        acq_state = self.parent_instr_obj.query("ACQUIRE:STATE?")
+        with self.resource_manager.open_resource(self.resource_name) as inst:
 
-        # initialize the instrument
-        self.parent_instr_obj.write("ACQUIRE:STATE STOP")
+            # Save the state of the acquisition system
+            acq_stopafter = inst.query("ACQUIRE:STOPAFTER?")
+            acq_state = inst.query("ACQUIRE:STATE?")
+
+            # initialize the instrument
+            inst.write("ACQUIRE:STATE STOP")
+
         i = 0
 
         # Main loop
         while True:
-            if isinstance(count, int):
-                i += 1
-                self.parent_instr_obj.write("ACQUIRE:STOPAFTER SEQUENCE")
-                self.parent_instr_obj.write("ACQUIRE:STATE RUN")
+            with self.resource_manager.open_resource(self.resource_name) as inst:
+                if isinstance(count, int):
+                    i += 1
+                    inst.write("ACQUIRE:STOPAFTER SEQUENCE")
+                    inst.write("ACQUIRE:STATE RUN")
 
-            # Wait for the sequence to complete
-            start_time = time()
-            while True:
+                # Wait for the sequence to complete
+                start_time = time()
+                while True:
 
-                # if the sequence is complete then stop waiting
-                if self.parent_instr_obj.query("ACQUIRE:STATE?").strip() == "0":
-                    break
+                    # if the sequence is complete then stop waiting
+                    if inst.query("ACQUIRE:STATE?").strip() == "0":
+                        break
 
-                # if the acquisition is taking to long, raise an exception
-                if (timeout is not None) and time() - start_time > timeout:
-                    restore()
-                    if count:
-                        msg = "Acquisition sequence number {} did not complete".format(
-                            i
-                        )
-                    else:
-                        msg = "Acquisition sequence did not complete"
-                    raise SequenceTimeout(msg)
+                    # if the acquisition is taking to long, raise an exception
+                    if (timeout is not None) and time() - start_time > timeout:
+                        restore(inst, restore_state)
+                        if count:
+                            msg = "Acquisition sequence number {} did not complete".format(
+                                i
+                            )
+                        else:
+                            msg = "Acquisition sequence did not complete"
+                        raise SequenceTimeout(msg)
 
-                # wait a bit and then check again
-                sleep(0.1)
+                    # wait a bit and then check again
+                    sleep(0.1)
 
             # Signal that a new acquisition is ready by sending the current count
             yield i
@@ -333,4 +321,5 @@ class TekSeriesAcquireFeat(FeatureBase):
                 break
 
         # Restore the acquisition state
-        restore()
+        with self.resource_manager.open_resource(self.resource_name) as inst:
+            restore(inst, restore_state)

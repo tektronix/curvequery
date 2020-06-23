@@ -14,7 +14,7 @@ The easy way to download curves from an oscilloscope.
 ## Description
 
 The curvequery package is a collection of tools to simplify downloading waveform data from an oscilloscope.
-It is a layer of functionality built on top of the PyVISA package.
+It is a layer of functionality built on top of the PyVISA package and the Visadore plugin manager.
 
 Maintainer: [Chad Stryker](https://github.com/cwstryker)
 
@@ -22,11 +22,10 @@ Maintainer: [Chad Stryker](https://github.com/cwstryker)
 ## Usage
 
 Creating a connection to the mixed signal oscilloscope is easy.
-The mso() helper function automatically sets up a connection using the pyvisa package module.
-The helper function returns a an Oscilloscope object with its high-level API.
+Invoke the Visadore plugin manager to create the oscilloscope interface object.
 
-    >>> from curvequery import mso
-    >>> oscope = mso("TCPIP::192.168.1.10::INSTR")
+    >>> from visadore import get
+    >>> oscope = get("TCPIP::192.168.1.10::INSTR")
     TEKTRONIX,MSO58,Q200011,CF:91.1CT FV:1.12.5.5575
     
 ### High Level API

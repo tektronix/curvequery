@@ -1,5 +1,1 @@
-from .api import mso
-
-__VERSION__ = "1.4.0"
-
-__all__ = ["mso"]
+__VERSION__ = "2.0.0"
