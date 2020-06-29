@@ -3,6 +3,8 @@ from enum import unique
 from time import sleep
 from time import time
 
+import pyvisa
+
 from .api_types import XScale
 from .api_types import YScale
 from .api_types import WaveformCollection
@@ -12,6 +14,8 @@ from .helper_methods import _disabled_pbar
 
 from visadore import base
 
+UNLOCK_DELAY = 0.01
+MAX_EVENTS = 33
 
 try:
     # noinspection PyUnresolvedReferences,PyPackageRequirements
@@ -31,8 +35,12 @@ class TekSeriesDefaultFeat(base.FeatureBase):
     def feature(self):
         """Performs a default setup and waits for the operation to finish"""
         with self.resource_manager.open_resource(self.resource_name) as inst:
-            inst.write("*RST")
-            inst.query("*OPC?")
+            try:
+                instr.write("*RST")
+                instr.query("*OPC?")
+            except pyvisa.errors.VisaIOError:
+                get_event_queue(instr)
+                raise
 
 
 class TekSeriesCurveFeat(base.FeatureBase):
@@ -50,13 +58,17 @@ class TekSeriesCurveFeat(base.FeatureBase):
             result = WaveformCollection()
 
             # iterate through all available sources
-            for ch, ch_data, x_scale, y_scale in self._get_data(
-                inst, self._list_sources(inst), use_pbar, decompose_dch
-            ):
+            try:
+                for ch, ch_data, x_scale, y_scale in self._get_data(
+                    inst, self._list_sources(inst), use_pbar, decompose_dch
+                ):
                 if verbose:
                     print(ch)
                 result.data[ch] = Waveform(ch_data, x_scale, y_scale)
-            return result
+            except pyvisa.errors.VisaIOError:
+                get_event_queue(instr)
+                raise
+        return result
 
     @staticmethod
     def _classify_waveform(source):
@@ -83,15 +95,30 @@ class TekSeriesCurveFeat(base.FeatureBase):
 
     @staticmethod
     def _get_xscale(instr):
-        xincr = instr.query("WFMOutpre:XINCR?").strip()
-        pt_off = instr.query("WFMOutpre:PT_OFF?").strip()
-        xzero = instr.query("WFMOutpre:XZERO?").strip()
-        xunit = instr.query("WFMOutpre:XUNIT?").strip()
+        """Get the horizontal scale of the instrument"""
 
-        slope = float(xincr)
-        offset = float(pt_off) * -slope + float(xzero)
-        unit = xunit.strip('"')
-        return XScale(slope, offset, unit)
+        # This function will generate a VISA timeout if there is no waveform data available
+        # and the channel is enabled.
+        try:
+            xincr = instr.query("WFMOutpre:XINCR?").strip()
+        except pyvisa.errors.VisaIOError:
+
+            # Flush out the VISA interface event queue
+            get_event_queue(instr, verbose=False)
+            result = None
+        else:
+
+            # collect more horizontal data
+            pt_off = instr.query("WFMOutpre:PT_OFF?").strip()
+            xzero = instr.query("WFMOutpre:XZERO?").strip()
+            xunit = instr.query("WFMOutpre:XUNIT?").strip()
+
+            # calculate horizontal scale
+            slope = float(xincr)
+            offset = float(pt_off) * -slope + float(xzero)
+            unit = xunit.strip('"')
+            result = XScale(slope, offset, unit)
+        return result
 
     @staticmethod
     def _get_yscale(instr, source):
@@ -153,6 +180,9 @@ class TekSeriesCurveFeat(base.FeatureBase):
             # Digital supper channels will produce 8 sources each
             if source.split("_")[0] not in downloaded_sources:
 
+                # Keep track of each super channel and math source that has been handled
+                downloaded_sources.append(source.split("_")[0])
+
                 # Determine the type of waveform and set key interface parameters
                 wave_type = self._classify_waveform(source)
                 channel = channel_table[wave_type](source)
@@ -170,67 +200,67 @@ class TekSeriesCurveFeat(base.FeatureBase):
 
                 # Horizontal scale information
                 x_scale = self._get_xscale(instr)
+                if x_scale is not None:
 
-                # Issue the curve query command
-                instr.write("curv?")
+                    # Issue the curve query command
+                    instr.write("curv?")
 
-                # Read the waveform data sent by the instrument
-                source_data = instr.read_binary_values(
-                    datatype=datatype, is_big_endian=True, expect_termination=True
-                )
-
-                # Normal analog channels must have the vertical scale and offset applied
-                if wave_type is WaveType.ANALOG:
-                    offset = float(instr.query("WFMOutpre:YZEro?"))
-                    scale = float(instr.query("WFMOutpre:YMUlt?"))
-                    source_data = [scale * i + offset for i in source_data]
-
-                # Format and return the result
-                if wave_type is WaveType.DIGITAL:
-
-                    # Digital channel to be decomposed into separate bits
-                    if decompose_dch:
-                        for bit in range(8):
-                            bit_channel = "{}_D{}".format(source.split("_")[0], bit)
-
-                            # if the bit channel is available, decompose the data
-                            if bit_channel in sources:
-                                bit_data = [(i >> (2 * bit)) & 1 for i in source_data]
-                                yield bit_channel, bit_data, x_scale, None
-
-                    # Digital channel to be converted into an 8-bit word
-                    else:
-                        digital = []
-                        for i in source_data:
-                            a = (
-                                (i & 0x4000) >> 7
-                                | (i & 0x1000) >> 6
-                                | (i & 0x400) >> 5
-                                | (i & 0x100) >> 4
-                                | (i & 0x40) >> 3
-                                | (i & 0x10) >> 2
-                                | (i & 0x4) >> 1
-                                | i & 0x1
-                            )
-                            digital.append(a)
-                            yield source.split("_")[0], digital, x_scale, None
-
-                elif wave_type is WaveType.ANALOG:
-                    # Include y-scale information with analog channel waveforms
-                    y_scale = self._get_yscale(instr, source)
-                    yield source, source_data, x_scale, y_scale
-
-                elif wave_type is WaveType.MATH:
-                    # Y-scale information for MATH channels is not supported at this time
-                    yield source, source_data, x_scale, None
-
-                else:
-                    raise Exception(
-                        "It should have been impossible to execute this code"
+                    # Read the waveform data sent by the instrument
+                    source_data = instr.read_binary_values(
+                        datatype=datatype, is_big_endian=True, expect_termination=True
                     )
 
-                # Keep track of each super channel and math source that has been handled
-                downloaded_sources.append(source.split("_")[0])
+                    # Normal analog channels must have the vertical scale and offset applied
+                    if wave_type is WaveType.ANALOG:
+                        offset = float(instr.query("WFMOutpre:YZEro?"))
+                        scale = float(instr.query("WFMOutpre:YMUlt?"))
+                        source_data = [scale * i + offset for i in source_data]
+
+                    # Format and return the result
+                    if wave_type is WaveType.DIGITAL:
+
+                        # Digital channel to be decomposed into separate bits
+                        if decompose_dch:
+                            for bit in range(8):
+                                bit_channel = "{}_D{}".format(source.split("_")[0], bit)
+
+                                # if the bit channel is available, decompose the data
+                                if bit_channel in sources:
+                                    bit_data = [
+                                        (i >> (2 * bit)) & 1 for i in source_data
+                                    ]
+                                    yield (bit_channel, bit_data, x_scale, None)
+
+                        # Digital channel to be converted into an 8-bit word
+                        else:
+                            digital = []
+                            for i in source_data:
+                                a = (
+                                    (i & 0x4000) >> 7
+                                    | (i & 0x1000) >> 6
+                                    | (i & 0x400) >> 5
+                                    | (i & 0x100) >> 4
+                                    | (i & 0x40) >> 3
+                                    | (i & 0x10) >> 2
+                                    | (i & 0x4) >> 1
+                                    | i & 0x1
+                                )
+                                digital.append(a)
+                                yield (source.split("_")[0], digital, x_scale, None)
+
+                    elif wave_type is WaveType.ANALOG:
+                        # Include y-scale information with analog channel waveforms
+                        y_scale = self._get_yscale(instr, source)
+                        yield (source, source_data, x_scale, y_scale)
+
+                    elif wave_type is WaveType.MATH:
+                        # Y-scale information for MATH channels is not supported at this time
+                        yield (source, source_data, x_scale, None)
+
+                    else:
+                        raise Exception(
+                            "It should have been impossible to execute this code"
+                        )
 
         # Restore the acquisition state
         instr.write("ACQuire:STATE {}".format(acq_state))
@@ -321,5 +351,55 @@ class TekSeriesAcquireFeat(base.FeatureBase):
                 break
 
         # Restore the acquisition state
-        with self.resource_manager.open_resource(self.resource_name) as inst:
-            restore(inst, restore_state)
+        restore()
+
+
+def get_event_queue(instr, verbose=True):
+    """This function queries events from the Event Queue and optionally prints the events on stdout"""
+    events = []
+
+    # An race condition will sometimes create a secondary timeout error
+    # This short delay seems to fix the issue
+    sleep(UNLOCK_DELAY)
+
+    # Reset the VISA interface and capture the Status Byte contents
+    instr.clear()
+    sbr = instr.query("*STB?").strip()
+
+    # Load events into the Event Queue
+    sesr = instr.query("*ESR?").strip()
+
+    # Optionally print data to stdout
+    if verbose:
+        print("VISA Timeout Exception Handler:")
+        print("  Status Byte (SBR) Register: {}".format(sbr))
+        print("  Standard Event Status (SESR) Register: {}".format(sesr))
+
+    # Download the events from the Event Queue, one at a time, up to the size of the Event Queue
+    for _ in range(MAX_EVENTS):
+
+        # After a short delay, download a single event and split it into a number and a description
+        sleep(UNLOCK_DELAY)
+        events.append(instr.query("EVMSG?").strip())
+        num, msg = tuple(events[-1].split(","))
+
+        # A '1' denotes that the Event Queue is empty but more events are available
+        if num == "1":
+
+            # After a short delay, load more events into the Event Queue and optionally print the
+            # SESR register contents to stdout
+            sleep(UNLOCK_DELAY)
+            sesr = instr.query("*ESR?").strip()
+            if verbose:
+                print("  Standard Event Status (SESR) Register: {}".format(sesr))
+
+        # A '0' denotes that there are no more events waiting on the instrument
+        if num == "0":
+            break
+
+        # Optionally, print the event to stdout
+        if verbose:
+            print("  Event: {}".format(events[-1]))
+
+    # Return a list of all events captured from the Event Queue
+    return events

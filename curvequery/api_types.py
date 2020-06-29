@@ -1,6 +1,5 @@
 from collections import namedtuple
 
-
 Identity = namedtuple("Identity", "company, model, serial, config")
 XScale = namedtuple("XScale", "slope, offset, unit")
 YScale = namedtuple("YScale", "top, bottom")
@@ -27,46 +26,6 @@ class CurveQueryError(VisaResourceError):
 
 class SequenceTimeout(Exception):
     """Raised when an acquisition does not finish in the specified time out period"""
-
-
-class PyVisaTimeoutError(Exception):
-    """
-    Exception raised when a socket time out occurs.
-
-    Attributes:
-        status (int or None): The status word
-        event_status (int or None): The event status word
-        events (TBD or None): TBD
-    """
-
-    def __init__(self, message, status=None, event_status=None, events=None):
-        """
-        The constructor for PyVisaTimeoutError.
-
-        Parameters:
-            message (str): A description of the time out circumstances.
-            status (int [optional]): The status word
-            event_status (int [optional]): The event status word
-            events (TBD [optional]): TBD
-        """
-        self.status = status
-        self.event_status = event_status
-        self.events = events
-        super().__init__(self, message)
-
-    def __str__(self):
-        stb_str = "Status Byte:   None"
-        if self.status is not None:
-            stb_str = "Status Byte:    0x{0:0>2X}".format(self.status)
-        esr_str = "Event Status:   None"
-        if self.event_status is not None:
-            esr_str = "Event Status:   0x{0:0>2X}".format(self.event_status)
-        evt_str = "Events: None"
-        if self.events is not None:
-            events_data = ["{}: {}".format(n, d) for n, d in self.events]
-            events_body = "\n                ".join(events_data)
-            evt_str = "Events:         {}".format(events_body)
-        return "\n".join([Exception.__str__(self), stb_str, esr_str, evt_str])
 
 
 class WaveformCollection:
@@ -114,4 +73,5 @@ class FeatureBase:
         with self.parent_instr_obj.rsrc_mgr.open_resource(
             self.parent_instr_obj.rsrc_name
         ) as instr:
+            instr.timeout = self.parent_instr_obj.timeout
             return self.action_fcn(instr, *args, **kwargs)
