@@ -10,7 +10,7 @@ from .api_types import YScale
 from .api_types import WaveformCollection
 from .api_types import Waveform
 from .api_types import SequenceTimeout
-from .helper_methods import _disabled_pbar
+from .api_types import _disabled_pbar
 
 from visadore import base
 

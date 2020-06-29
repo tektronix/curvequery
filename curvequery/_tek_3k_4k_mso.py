@@ -1,4 +1,3 @@
-from .api_types import FeatureBase
 from .api_types import WaveformCollection
 from .api_types import Waveform
 
