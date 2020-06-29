@@ -36,10 +36,10 @@ class TekSeriesDefaultFeat(base.FeatureBase):
         """Performs a default setup and waits for the operation to finish"""
         with self.resource_manager.open_resource(self.resource_name) as inst:
             try:
-                instr.write("*RST")
-                instr.query("*OPC?")
+                inst.write("*RST")
+                inst.query("*OPC?")
             except pyvisa.errors.VisaIOError:
-                get_event_queue(instr)
+                get_event_queue(inst)
                 raise
 
 
@@ -62,11 +62,11 @@ class TekSeriesCurveFeat(base.FeatureBase):
                 for ch, ch_data, x_scale, y_scale in self._get_data(
                     inst, self._list_sources(inst), use_pbar, decompose_dch
                 ):
-                if verbose:
-                    print(ch)
-                result.data[ch] = Waveform(ch_data, x_scale, y_scale)
+                    if verbose:
+                        print(ch)
+                    result.data[ch] = Waveform(ch_data, x_scale, y_scale)
             except pyvisa.errors.VisaIOError:
-                get_event_queue(instr)
+                get_event_queue(inst)
                 raise
         return result
 
@@ -196,7 +196,7 @@ class TekSeriesCurveFeat(base.FeatureBase):
                 # Set the start and stop point of the record
                 rec_len = instr.query("horizontal:recordlength?").strip()
                 instr.write("data:start 1")
-                instr.write("data:stop {}").format(rec_len)
+                instr.write("data:stop {}".format(rec_len))
 
                 # Horizontal scale information
                 x_scale = self._get_xscale(instr)
@@ -229,7 +229,7 @@ class TekSeriesCurveFeat(base.FeatureBase):
                                     bit_data = [
                                         (i >> (2 * bit)) & 1 for i in source_data
                                     ]
-                                    yield (bit_channel, bit_data, x_scale, None)
+                                    yield bit_channel, bit_data, x_scale, None
 
                         # Digital channel to be converted into an 8-bit word
                         else:
@@ -246,16 +246,16 @@ class TekSeriesCurveFeat(base.FeatureBase):
                                     | i & 0x1
                                 )
                                 digital.append(a)
-                                yield (source.split("_")[0], digital, x_scale, None)
+                                yield source.split("_")[0], digital, x_scale, None
 
                     elif wave_type is WaveType.ANALOG:
                         # Include y-scale information with analog channel waveforms
                         y_scale = self._get_yscale(instr, source)
-                        yield (source, source_data, x_scale, y_scale)
+                        yield source, source_data, x_scale, y_scale
 
                     elif wave_type is WaveType.MATH:
                         # Y-scale information for MATH channels is not supported at this time
-                        yield (source, source_data, x_scale, None)
+                        yield source, source_data, x_scale, None
 
                     else:
                         raise Exception(
@@ -296,11 +296,11 @@ class TekSeriesAcquireFeat(base.FeatureBase):
                 instrument. (default: True)
         """
 
-        def restore(instr, enabled):
+        def restore(instr, enabled, stop_after, state):
             """This helper function restores the acquisition state, if enabled"""
             if enabled:
-                instr.write("ACQUIRE:STOPAFTER {}".format(acq_stopafter))
-                instr.write("ACQUIRE:STATE {}".format(acq_state))
+                instr.write("ACQUIRE:STOPAFTER {}".format(stop_after))
+                instr.write("ACQUIRE:STATE {}".format(state))
 
         with self.resource_manager.open_resource(self.resource_name) as inst:
 
@@ -321,17 +321,17 @@ class TekSeriesAcquireFeat(base.FeatureBase):
                     inst.write("ACQUIRE:STOPAFTER SEQUENCE")
                     inst.write("ACQUIRE:STATE RUN")
 
-                # Wait for the sequence to complete
+                # Timeout loop to ensure the acquisition does not hang up
                 start_time = time()
                 while True:
 
-                    # if the sequence is complete then stop waiting
+                    # If the sequence is complete then stop waiting
                     if inst.query("ACQUIRE:STATE?").strip() == "0":
                         break
 
-                    # if the acquisition is taking to long, raise an exception
+                    # If the acquisition is taking to long, raise an exception
                     if (timeout is not None) and time() - start_time > timeout:
-                        restore(inst, restore_state)
+                        restore(inst, restore_state, acq_state, acq_stopafter)
                         if count:
                             msg = "Acquisition sequence number {} did not complete".format(
                                 i
@@ -343,6 +343,7 @@ class TekSeriesAcquireFeat(base.FeatureBase):
                     # wait a bit and then check again
                     sleep(0.1)
 
+            # exiting context manager, instrument object is closed
             # Signal that a new acquisition is ready by sending the current count
             yield i
 
@@ -351,7 +352,8 @@ class TekSeriesAcquireFeat(base.FeatureBase):
                 break
 
         # Restore the acquisition state
-        restore()
+        with self.resource_manager.open_resource(self.resource_name) as inst:
+            restore(inst, restore_state, acq_state, acq_stopafter)
 
 
 def get_event_queue(instr, verbose=True):
