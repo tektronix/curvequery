@@ -331,7 +331,7 @@ class TekSeriesAcquireFeat(base.FeatureBase):
 
                     # If the acquisition is taking to long, raise an exception
                     if (timeout is not None) and time() - start_time > timeout:
-                        restore(inst, restore_state, acq_state, acq_stopafter)
+                        restore(inst, restore_state, acq_stopafter, acq_state)
                         if count:
                             msg = "Acquisition sequence number {} did not complete".format(
                                 i
@@ -353,7 +353,7 @@ class TekSeriesAcquireFeat(base.FeatureBase):
 
         # Restore the acquisition state
         with self.resource_manager.open_resource(self.resource_name) as inst:
-            restore(inst, restore_state, acq_state, acq_stopafter)
+            restore(inst, restore_state, acq_stopafter, acq_state)
 
 
 def get_event_queue(instr, verbose=True):
