@@ -83,6 +83,7 @@ Other potential high level features are possible...
     - 3.4+
 - 3rd Party Modules:
     - pyvisa 1.9.1      Python VISA interface library
+    - visadore          Visadore plugin manager
 
 ## Installation
 
@@ -98,7 +99,7 @@ See the [Source section](#source-section) below for instructions on how to make 
 Using pip, install the package module directly from a source distribution tarball in the Windows and Linux environments.
 Using this method, all 3rd-party package modules will automatically be downloaded from PyPI and installed.
 
-    $ pip install curvequery-1.0.0.tar.gz
+    $ pip install curvequery-2.0.tar.gz
 
 
 ## <a name="source-section"></a>Source
