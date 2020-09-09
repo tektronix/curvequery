@@ -24,11 +24,24 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize("resource_name", metafunc.config.option.resource)
 
 
-@pytest.fixture
+def osc_fixture(supported_instrument_list):
+    def osc_with_supported_list(fn):
+        @pytest.fixture
+        def fixture(resource_name):
+            """A fixture that returns an instrument object if the instrument is in the list
+            of supported instruments.  Otherwise, the fixture will skip the test."""
+            osc = get(resource_name)
+            idn = osc.idn
+            if (idn.company, idn.model) in supported_instrument_list:
+                return osc
+            else:
+                pytest.skip("{} not a supported instrument".format(idn))
+
+        return fixture
+
+    return osc_with_supported_list
+
+
+@osc_fixture(SUPPORTED_ALL_SERIES_OSC)
 def all_series_osc(resource_name):
-    osc = get(resource_name)
-    idn = osc.idn
-    if (idn.company, idn.model) in SUPPORTED_ALL_SERIES_OSC:
-        return osc
-    else:
-        pytest.skip("{} not a supported instrument".format(idn))
+    pass
