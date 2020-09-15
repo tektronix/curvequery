@@ -80,18 +80,14 @@ Other potential high level features are possible...
 ## Requirements
 
 - Python: 
-    - 3.4+
+    - 3.5+
 - 3rd Party Modules:
     - pyvisa 1.9.1      Python VISA interface library
     - visadore          Visadore plugin manager
 
 ## Installation
 
-The curvequery package can be installed using conda or from source.
-
-#### Installation using Conda
-
-{Conda instructions are TBD}.
+The curvequery package can be installed from source.
 
 #### Installation from Source
 
@@ -101,12 +97,6 @@ Using this method, all 3rd-party package modules will automatically be downloade
 
     $ pip install curvequery-2.0.tar.gz
 
-
 ## <a name="source-section"></a>Source
 
-The source code for curvequery is available on TBD
-
-Creating a source distribution for later installation is easy:
-
-    $ cd {top/directory/of/the/source/tree}
-    $ python setup.py sdist
+The source code for curvequery is available on GitHub.
