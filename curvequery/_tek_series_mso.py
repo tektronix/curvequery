@@ -269,10 +269,10 @@ class TekSeriesCurveFeat(base.FeatureBase):
 class TekSeriesSetupFeat(base.FeatureBase):
     def feature(self, settings=None):
         """
-        Returns the setup configuration from the instrument as a string.
+        Sets or gets the setup configuration from the instrument as a string.
         """
         with self.resource_manager.open_resource(self.resource_name) as inst:
-            inst.timeout = 20000
+            inst.timeout = 20000    # this can take a while, so use a 20 second timeout
             if settings:
                 inst.write("{:s}".format(settings))
                 inst.query("*OPC?")
