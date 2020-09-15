@@ -68,7 +68,7 @@ __Talking to the Instrument__
 
 A VISA connection to the instrument must be created by the Feature() method to communicate 
 with the instrument.
-the connection must also we closed by the feature code.
+the connection must also be closed by the feature code.
 Typically, the __with__ statement is used to do this, and it looks like the following:
 
     with self.resource_manager.open_resource(self.resource_name) as inst:
@@ -88,6 +88,8 @@ Here is the entry point definition for the new feature.
 This definition maps the new TekSeriesSetupFeat subclass to instruments that report their 
 make as "Tektronix" and their model as "MSO46."
 The setup.cfg contains many such definitions.
+
+__Test the Feature__
 
 Finally, test your new feature.
 
