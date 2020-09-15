@@ -34,8 +34,7 @@ def osc_fixture(supported_instrument_list):
             idn = osc.idn
             if (idn.company, idn.model) in supported_instrument_list:
                 return osc
-            else:
-                pytest.skip("{} not a supported instrument".format(idn))
+            pytest.skip("{} not a supported instrument".format(idn))
 
         return fixture
 
