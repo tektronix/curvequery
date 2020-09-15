@@ -1,4 +1,7 @@
 /curvequery/__pycache__/
+/test/__pycache__/
 /build/
 /dist/
 /curvequery.egg-info/
+/.tox/
+/jupyter/

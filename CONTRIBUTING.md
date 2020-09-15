@@ -20,19 +20,19 @@ Guide [Section 3.16](http://google.github.io/styleguide/pyguide.html#316-naming)
 
 ## Adding New Features
 
-### Adding a feature to an existing instrument type
-
-Features are added to an Instrument object dynamically based the identity string (i.e. 
-*IDN?) reported by the instrument. 
-Adding a new feature to an existing Instrument subclass (i.e. specific make / model) 
-is fairly simple.
-The framework built into the curvequery package handles most of the complexity 
-associated with dynamic feature assignment.
+Features are organized into files where each file contains features compatible with a given 
+instrument family or group of instrument families. 
+Adding a new feature to an existing Instrument model (i.e. specific make / model) is fairly simple.
+The visadore plugin manager handles all of the complexity associated with the dynamic construction 
+of the instrument object.
+Visadore uses setuptools entry points defined in the setup.cfg file to map the appropriate features
+to a specific instrument base don that instrument's make and model information.
+Visadore uses the *IDN? query to determine the make and model of the instrument.
 
 Adding a new feature requires the following steps:
 <ol>
-    <li>Create a new feature class inherting from the FeatureBase class.</li>
-    <li>Register the new feature class by creating a new feature table.</li>
+    <li>Create a new feature class inheriting from the FeatureBase abstract base class.</li>
+    <li>Register the new feature / instrument mapping in setup.cfg.</li>
 </ol>
 
 __Creating a FeatureBase Subclass__
@@ -40,92 +40,69 @@ __Creating a FeatureBase Subclass__
 The following example, shows how to add a new feature to read the setup configuration 
 from a Tektronix 4 Series oscilloscope.
 
-First, create a new FeatureBase subclass to the _tek_series_mso.py file.
+Create a new FeatureBase subclass in the _tek_series_mso.py file.
 This where all of the specific functionality associated with the feature is defined.
 
-    class TekSeriesSetupFeat(FeatureBase):
-        """
-        Returns the setup configuration from the instrument as a string.
-        """
-    
-        @staticmethod
-        def action_fcn(instr, settings=None):
+    class TekSeriesSetupFeat(base.FeatureBase):
+        def feature(self, settings=None):
             """
-            Action Function
+            Sets or gets the setup configuration from the instrument as a string.
             """
-    
-            instr.timeout = 20000
-            if settings:
-                instr.write("{:s}".format(settings))
-                instr.query("*OPC?")
-            else:
-                return instr.query("SET?")
+            with self.resource_manager.open_resource(self.resource_name) as inst:
+                inst.timeout = 20000    # this can take a while, so use a 20 second timeout
+                if settings:
+                    inst.write("{:s}".format(settings))
+                    inst.query("*OPC?")
+                else:
+                    return inst.query("SET?")
 
-
-__The Action Function__
-
-In this simple example, the functionality is implemented in the static method 
-_action_fcn().  
-This is the action function.
-The action function must always be defined by the subclass.
+In this simple example, the new subclass is named TekSeriesSetupFeat.
+The feature functionality is implemented in the feature() method.  
+The feature() method must always be defined by the subclass.
 Subsequent positional and keyword arguments are optional and specific to the given 
 action function. 
-The action function in this example queries and returns the setup configuration string 
+The feature() method in this example queries and returns the setup configuration string 
 from the instrument.
 
+__Talking to the Instrument__
 
-__The Feature Tables__
+A VISA connection to the instrument must be created by the Feature() method to communicate 
+with the instrument.
+the connection must also be closed by the feature code.
+Typically, the __with__ statement is used to do this, and it looks like the following:
 
-The new FeatureBase subclass needs to be added to the mso_tables.py file.
-Since we are adding a completely new feature that has not been implemented before, we 
-need a add a new table.
+    with self.resource_manager.open_resource(self.resource_name) as inst:
+        # talk to the instrument (inst)
 
-    # A table that maps model numbers to the appropriate get setup class
-    SETUP_TABLE = FeatureTable(name="setup", entries={
-        ("TEKTRONIX", "MSO44"): _tek_series_mso.TekSeriesSetupFeat,
-        ("TEKTRONIX", "MSO46"): _tek_series_mso.TekSeriesSetupFeat,
-    })
+__Registering the Feature__
 
-The table is created using FeatureTable where the new feature is assigned to the name 
-get_setup.
+The new FeatureBase subclass needs to be registered in the setuptools entry points so 
+that visadore can find it.
+The entry point is defined in the setup.cfg file.
+Here is the entry point definition for the new feature.
 
-The new table also needs to be added to the list of tables in the same file.
+    visadore.tektronix.mso46 =
+        ...
+        setup = curvequery._tek_series_mso:TekSeriesSetupFeat
 
-    MSO_FEATURE_TABLES = [CURVE_TABLE, DEFAULT_TABLE, SETUP_TABLE]
-    
+This definition maps the new TekSeriesSetupFeat subclass to instruments that report their 
+make as "Tektronix" and their model as "MSO46."
+The setup.cfg contains many such definitions.
+
+__Test the Feature__
+
 Finally, test your new feature.
 
-    >>> from curvequery import mso
-    >>> oscope = mso("TCPIP::192.168.1.10::INSTR")
+    >>> from visadore import get
+    >>> oscope = get("TCPIP::192.168.1.10::INSTR")
     TEKTRONIX,MSO46,DP100005,CF:91.1CT FV:1.18.0.6630
     >>> oscope.setup()
     '*RST;:PARAMBATCHING 0;:TRIGGER:AUXLEVEL 0.0E+0;:CH1:BANDWIDTH 1.0000E+9;:CH... '
 
-__Action Functions that Implement Generators__
-
-For action functions that implement generators, the pyvisa resource object cannot be 
-used to access the instrument.
-When the generator object is returned by the call to the action function, the pyvisa
-resource object is automatically closed and can no longer be used to access the 
-instrument.
-Instead, generators should communicate with the instrument through the reference to the
-Instrument sub-class object attached to the feature.
-Calls to the write() and query() methods of the Instrument sub-class object will 
-automatically create a new, temporary connection to the instrument.
-See the example code fragment below.
-
-    def action_fcn(self, _, *, sample_parameter=False):
-        """
-        Action Function
-        """
-
-        while True:
-
-            # Is the instrument finished acquiring data?
-            if self.parent_instr_obj.query("").strip() == "0":
-                yield
-
 ## Contributor License Agreement
-Contributions to this project must be accompanied by a Contributor License Agreement. You (or your employer) retain the copyright to your contribution; this simply gives us permission to use and redistribute your contributions as part of the project.
+Contributions to this project must be accompanied by a Contributor License Agreement. You (or 
+your employer) retain the copyright to your contribution; this simply gives us permission to use 
+and redistribute your contributions as part of the project.
 
-You generally only need to submit a CLA once, so if you've already submitted one (even if it was for a different project), you probably don't need to do it again.
+You generally only need to submit a CLA once, so if you've already submitted one (even if it was 
+for a different project), you probably don't need to do it again.

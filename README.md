@@ -14,7 +14,7 @@ The easy way to download curves from an oscilloscope.
 ## Description
 
 The curvequery package is a collection of tools to simplify downloading waveform data from an oscilloscope.
-It is a layer of functionality built on top of the PyVISA package.
+It is a layer of functionality built on top of the PyVISA package and the Visadore plugin manager.
 
 Maintainer: [Chad Stryker](https://github.com/cwstryker)
 
@@ -22,11 +22,10 @@ Maintainer: [Chad Stryker](https://github.com/cwstryker)
 ## Usage
 
 Creating a connection to the mixed signal oscilloscope is easy.
-The mso() helper function automatically sets up a connection using the pyvisa package module.
-The helper function returns a an Oscilloscope object with its high-level API.
+Invoke the Visadore plugin manager to create the oscilloscope interface object.
 
-    >>> from curvequery import mso
-    >>> oscope = mso("TCPIP::192.168.1.10::INSTR")
+    >>> from visadore import get
+    >>> oscope = get("TCPIP::192.168.1.10::INSTR")
     TEKTRONIX,MSO58,Q200011,CF:91.1CT FV:1.12.5.5575
     
 ### High Level API
@@ -81,17 +80,14 @@ Other potential high level features are possible...
 ## Requirements
 
 - Python: 
-    - 3.4+
+    - 3.5+
 - 3rd Party Modules:
     - pyvisa 1.9.1      Python VISA interface library
+    - visadore          Visadore plugin manager
 
 ## Installation
 
-The curvequery package can be installed using conda or from source.
-
-#### Installation using Conda
-
-{Conda instructions are TBD}.
+The curvequery package can be installed from source.
 
 #### Installation from Source
 
@@ -99,14 +95,8 @@ See the [Source section](#source-section) below for instructions on how to make 
 Using pip, install the package module directly from a source distribution tarball in the Windows and Linux environments.
 Using this method, all 3rd-party package modules will automatically be downloaded from PyPI and installed.
 
-    $ pip install curvequery-1.0.0.tar.gz
-
+    $ pip install curvequery-2.0.tar.gz
 
 ## <a name="source-section"></a>Source
 
-The source code for curvequery is available on TBD
-
-Creating a source distribution for later installation is easy:
-
-    $ cd {top/directory/of/the/source/tree}
-    $ python setup.py sdist
+The source code for curvequery is available on GitHub.

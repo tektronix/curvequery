@@ -44,34 +44,6 @@ class WaveformCollection:
         return len(self.data.keys())
 
 
-class FeatureBase:
-    """
-    This parent class provides the common framework needed to implement an
-    instrument feature subclass.
-
-    Attributes:
-        parent_instr_obj (obj): A reference to the parent instrument object
-            associated with the feature.
-    """
-
-    def __init__(self, parent_instr_obj):
-        """
-        This __init__ method should not be subclassed.
-
-        Parameters:
-            parent_instr_obj (obj): A reference to the parent instrument object
-                associated with the feature.
-        """
-
-        self.parent_instr_obj = parent_instr_obj
-
-    def __call__(self, *args, **kwargs):
-        """
-        This __call__method should not be subclassed. This method calls the action_fcn method.
-        """
-
-        with self.parent_instr_obj.rsrc_mgr.open_resource(
-            self.parent_instr_obj.rsrc_name
-        ) as instr:
-            instr.timeout = self.parent_instr_obj.timeout
-            return self.action_fcn(instr, *args, **kwargs)
+def _disabled_pbar(iterable, *args, **kwargs):
+    for i in iterable:
+        yield i
