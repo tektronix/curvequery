@@ -1,7 +1,10 @@
+from collections import namedtuple
 from enum import Enum
 from enum import unique
+from functools import reduce
 from time import sleep
 from time import time
+import types
 
 import pyvisa
 
@@ -11,6 +14,7 @@ from .api_types import WaveformCollection
 from .api_types import Waveform
 from .api_types import SequenceTimeout
 from .api_types import _disabled_pbar
+from ._tqdm_util import read_bytes_with_tqdm
 
 from visadore import base
 
@@ -31,6 +35,10 @@ class WaveType(Enum):
     MATH = 3
 
 
+JobParameters = namedtuple("JobParameters",
+                           ["wave_type", "channel_name", "encoding", "bit_nr", "data_type", "record_length"])
+
+
 class TekSeriesDefaultFeat(base.FeatureBase):
     def feature(self):
         """Performs a default setup and waits for the operation to finish"""
@@ -44,7 +52,7 @@ class TekSeriesDefaultFeat(base.FeatureBase):
 
 
 class TekSeriesCurveFeat(base.FeatureBase):
-    def feature(self, *, use_pbar=False, decompose_dch=True, verbose=False):
+    def feature(self, *, use_pbar=True, decompose_dch=True, verbose=False):
         """
         Returns a WaveformCollection object containing waveform data available on the instrument.
 
@@ -60,7 +68,7 @@ class TekSeriesCurveFeat(base.FeatureBase):
             # iterate through all available sources
             try:
                 for ch, ch_data, x_scale, y_scale in self._get_data(
-                    inst, self._list_sources(inst), use_pbar, decompose_dch
+                        inst, self._list_sources(inst), use_pbar, decompose_dch
                 ):
                     if verbose:
                         print(ch)
@@ -146,7 +154,168 @@ class TekSeriesCurveFeat(base.FeatureBase):
         ]
         return useful_waveforms
 
+    def _make_jobs(self, instr, sources):
+        """Scan the instrument for available sources of data construct a list of jobs"""
+
+        encoding_table = {
+            WaveType.MATH: ("FPBinary", 16, "d"),
+            WaveType.DIGITAL: ("RIBinary", 16, "h"),
+            WaveType.ANALOG: ("RIBinary", 16, "h"),
+        }
+        channel_table = {
+            WaveType.MATH: lambda x: x,
+            WaveType.DIGITAL: lambda x: "_".join([x.split("_")[0], "DALL"]),
+            WaveType.ANALOG: lambda x: x,
+        }
+
+        results = {}
+        for source in sources:
+            if source.split("_")[0] not in results:
+                # Determine the type of waveform and set key interface parameters
+                wave_type = self._classify_waveform(source)
+                channel = channel_table[wave_type](source)
+                encoding, bit_nr, datatype = encoding_table[wave_type]
+
+                # Set the start and stop point of the record
+                rec_len = int(instr.query("horizontal:recordlength?").strip())
+
+                # Keep track of each super channel and math source that has been handled
+                results[source.split("_")[0]] = JobParameters(wave_type, channel, encoding, bit_nr, datatype, rec_len)
+
+        return results
+
+    @staticmethod
+    def _setup_curve_query(instr, source, parameters: dict[str, JobParameters]):
+        """Setup the instrument for the curve query operation"""
+
+        # extract the job parameters
+        wave_type, channel, encoding, bit_nr, datatype, rec_len = parameters[source]
+
+        # Switch to the source and setup the data encoding
+        instr.write("data:source {}".format(channel))
+        instr.write("data:encdg {}".format(encoding))
+        instr.write("WFMOUTPRE:BIT_NR {}".format(bit_nr))
+
+        # Set the start and stop point of the record
+        rec_len = instr.query("horizontal:recordlength?").strip()
+        instr.write("data:start 1")
+        instr.write("data:stop {}".format(rec_len))
+
+    def _post_process_analog(self, instr, source, source_data, x_scale):
+        """Post processes analog channel data"""
+
+        # Normal analog channels must have the vertical scale and offset applied
+        offset = float(instr.query("WFMOutpre:YZEro?"))
+        scale = float(instr.query("WFMOutpre:YMUlt?"))
+        source_data = [scale * i + offset for i in source_data]
+
+        # Include y-scale information with analog channel waveforms
+        y_scale = self._get_yscale(instr, source)
+
+        return source, source_data, x_scale, y_scale
+
+    @staticmethod
+    def _post_process_digital_bits(sources, source, source_data, x_scale, bit):
+        """Post processes digital channel data as separate bits"""
+
+        bit_channel = "{}_D{}".format(source.split("_")[0], bit)
+
+        # if the bit channel is available, decompose the data
+        if bit_channel in sources:
+            bit_data = [
+                (i >> (2 * bit)) & 1 for i in source_data
+            ]
+            return bit_channel, bit_data, x_scale, None
+
+        # Nothing to decompose
+        else:
+            return None
+
+    @staticmethod
+    def _post_process_digital_byte(source, source_data, x_scale):
+        """Post processes digital channel data as a byte"""
+        digital = []
+        for i in source_data:
+            a = (
+                (i & 0x4000) >> 7
+                | (i & 0x1000) >> 6
+                | (i & 0x400) >> 5
+                | (i & 0x100) >> 4
+                | (i & 0x40) >> 3
+                | (i & 0x10) >> 2
+                | (i & 0x4) >> 1
+                | i & 0x1
+            )
+            digital.append(a)
+        return source.split("_")[0], digital, x_scale, None
+
     def _get_data(self, instr, sources, use_pbar, decompose_dch):
+        """Returns an iterator that yields the source data from the oscilloscope"""
+
+        jobs = self._make_jobs(instr, sources)
+
+        # remember the state of the acquisition system and then stop acquiring waveforms
+        acq_state = instr.query("ACQuire:STATE?").strip()
+        instr.write("ACQuire:STATE STOP")
+
+        # Two (2) bytes per sample
+        total_bytes = 2 * reduce(lambda a, b: a + b, [jobs[i].record_length for i in jobs])
+
+        pbar_disabled = False if use_pbar and ("tqdm" in globals()) else True
+
+        with tqdm(desc="Downloading", unit="B", total=total_bytes, disable=pbar_disabled) as t:
+
+            # Patch the instr object with a custom read_types method that implements tqdm updates
+            instr.read_bytes = types.MethodType(read_bytes_with_tqdm(tqdm_obj=t), instr)
+
+            for source in jobs:
+
+                self._setup_curve_query(instr, source, jobs)
+
+                # extract the job parameters
+                wave_type, channel, encoding, bit_nr, datatype, rec_len = jobs[source]
+
+                # Horizontal scale information
+                x_scale = self._get_xscale(instr)
+                if x_scale is not None:
+
+                    # Issue the curve query command
+                    instr.write("curv?")
+
+                    # Read the waveform data sent by the instrument
+                    source_data = instr.read_binary_values(
+                        datatype=datatype, is_big_endian=True, expect_termination=True
+                    )
+
+                    if wave_type is WaveType.DIGITAL:
+
+                        # Digital channel to be decomposed into separate bits
+                        if decompose_dch:
+                            for bit in range(8):
+                                result = self._post_process_digital_bits(sources, source, source_data, x_scale, bit)
+                                if result:
+                                    yield result
+
+                        # Digital channel to be converted into an 8-bit word
+                        else:
+                            yield self._post_process_digital_byte(source, source_data, x_scale)
+
+                    elif wave_type is WaveType.ANALOG:
+                        yield self._post_process_analog(instr, source, source_data, x_scale)
+
+                    elif wave_type is WaveType.MATH:
+                        # Y-scale information for MATH channels is not supported at this time
+                        yield source, source_data, x_scale, None
+
+                    else:
+                        raise Exception(
+                            "It should have been impossible to execute this code"
+                        )
+
+        # Restore the acquisition state
+        instr.write("ACQuire:STATE {}".format(acq_state))
+
+    def _x_get_data(self, instr, sources, use_pbar, decompose_dch):
         """Returns an iterator that yields the source data from the oscilloscope"""
 
         encoding_table = {
@@ -236,14 +405,14 @@ class TekSeriesCurveFeat(base.FeatureBase):
                             digital = []
                             for i in source_data:
                                 a = (
-                                    (i & 0x4000) >> 7
-                                    | (i & 0x1000) >> 6
-                                    | (i & 0x400) >> 5
-                                    | (i & 0x100) >> 4
-                                    | (i & 0x40) >> 3
-                                    | (i & 0x10) >> 2
-                                    | (i & 0x4) >> 1
-                                    | i & 0x1
+                                        (i & 0x4000) >> 7
+                                        | (i & 0x1000) >> 6
+                                        | (i & 0x400) >> 5
+                                        | (i & 0x100) >> 4
+                                        | (i & 0x40) >> 3
+                                        | (i & 0x10) >> 2
+                                        | (i & 0x4) >> 1
+                                        | i & 0x1
                                 )
                                 digital.append(a)
                                 yield source.split("_")[0], digital, x_scale, None
@@ -405,3 +574,4 @@ def get_event_queue(instr, verbose=True):
 
     # Return a list of all events captured from the Event Queue
     return events
+
