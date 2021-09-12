@@ -1,27 +1,26 @@
+import types
+from collections import namedtuple
 from enum import Enum
 from enum import unique
+from functools import reduce
 from time import sleep
 from time import time
 
 import pyvisa
+from visadore import base
+from tqdm import tqdm
 
+from .api_types import SequenceTimeout
+from .api_types import Waveform
+from .api_types import WaveformCollection
 from .api_types import XScale
 from .api_types import YScale
-from .api_types import WaveformCollection
-from .api_types import Waveform
-from .api_types import SequenceTimeout
-from .api_types import _disabled_pbar
-
-from visadore import base
+from ._pyvisa_tqdm_patch import _raw_read_with_tqdm
+from ._pyvisa_tqdm_patch import read_binary_values_with_custom_read_methods
+from ._pyvisa_tqdm_patch import read_bytes_with_tqdm
 
 UNLOCK_DELAY = 0.01
 MAX_EVENTS = 33
-
-try:
-    # noinspection PyUnresolvedReferences,PyPackageRequirements
-    from tqdm import tqdm
-except ImportError:
-    pass
 
 
 @unique
@@ -29,6 +28,12 @@ class WaveType(Enum):
     ANALOG = 1
     DIGITAL = 2
     MATH = 3
+
+
+JobParameters = namedtuple(
+    "JobParameters",
+    ["wave_type", "channel_name", "encoding", "bit_nr", "data_type", "record_length"],
+)
 
 
 class TekSeriesDefaultFeat(base.FeatureBase):
@@ -44,7 +49,7 @@ class TekSeriesDefaultFeat(base.FeatureBase):
 
 
 class TekSeriesCurveFeat(base.FeatureBase):
-    def feature(self, *, use_pbar=False, decompose_dch=True, verbose=False):
+    def feature(self, *, use_pbar=True, decompose_dch=True, verbose=False):
         """
         Returns a WaveformCollection object containing waveform data available on the instrument.
 
@@ -146,8 +151,8 @@ class TekSeriesCurveFeat(base.FeatureBase):
         ]
         return useful_waveforms
 
-    def _get_data(self, instr, sources, use_pbar, decompose_dch):
-        """Returns an iterator that yields the source data from the oscilloscope"""
+    def _make_jobs(self, instr, sources):
+        """Scan the instrument for available sources of data construct a list of jobs"""
 
         encoding_table = {
             WaveType.MATH: ("FPBinary", 16, "d"),
@@ -160,43 +165,133 @@ class TekSeriesCurveFeat(base.FeatureBase):
             WaveType.ANALOG: lambda x: x,
         }
 
-        # remember the state of the acquisition system and then stop acquiring waveforms
-        acq_state = instr.query("ACQuire:STATE?").strip()
-        instr.write("ACQuire:STATE STOP")
-
-        # keep track of the sources so that we only download each digital channel only once
-        downloaded_sources = []
-
-        # if tqdm is installed, display a progress bar
-        if use_pbar and ("tqdm" in globals()):
-            pbar = tqdm
-        else:
-            pbar = _disabled_pbar
-
-        # Process one signal source at a time
-        for source in pbar(sources, desc="Downloading", unit="Wfm"):
-
-            # Only download super channels and math waveforms once
-            # Digital supper channels will produce 8 sources each
-            if source.split("_")[0] not in downloaded_sources:
-
-                # Keep track of each super channel and math source that has been handled
-                downloaded_sources.append(source.split("_")[0])
-
+        results = {}
+        for source in sources:
+            if source.split("_")[0] not in results:
                 # Determine the type of waveform and set key interface parameters
                 wave_type = self._classify_waveform(source)
                 channel = channel_table[wave_type](source)
                 encoding, bit_nr, datatype = encoding_table[wave_type]
 
-                # Switch to the source and setup the data encoding
-                instr.write("data:source {}".format(channel))
-                instr.write("data:encdg {}".format(encoding))
-                instr.write("WFMOUTPRE:BIT_NR {}".format(bit_nr))
-
                 # Set the start and stop point of the record
-                rec_len = instr.query("horizontal:recordlength?").strip()
-                instr.write("data:start 1")
-                instr.write("data:stop {}".format(rec_len))
+                rec_len = int(instr.query("horizontal:recordlength?").strip())
+
+                # Keep track of each super channel and math source that has been handled
+                results[source.split("_")[0]] = JobParameters(
+                    wave_type, channel, encoding, bit_nr, datatype, rec_len
+                )
+
+        return results
+
+    @staticmethod
+    def _setup_curve_query(instr, source, parameters: dict[str, JobParameters]):
+        """Setup the instrument for the curve query operation"""
+
+        # extract the job parameters
+        wave_type, channel, encoding, bit_nr, datatype, rec_len = parameters[source]
+
+        # Switch to the source and setup the data encoding
+        instr.write("data:source {}".format(channel))
+        instr.write("data:encdg {}".format(encoding))
+        instr.write("WFMOUTPRE:BIT_NR {}".format(bit_nr))
+
+        # Set the start and stop point of the record
+        rec_len = instr.query("horizontal:recordlength?").strip()
+        instr.write("data:start 1")
+        instr.write("data:stop {}".format(rec_len))
+
+    def _post_process_analog(self, instr, source, source_data, x_scale):
+        """Post processes analog channel data"""
+
+        # Normal analog channels must have the vertical scale and offset applied
+        offset = float(instr.query("WFMOutpre:YZEro?"))
+        scale = float(instr.query("WFMOutpre:YMUlt?"))
+        source_data = [scale * i + offset for i in source_data]
+
+        # Include y-scale information with analog channel waveforms
+        y_scale = self._get_yscale(instr, source)
+
+        return source, source_data, x_scale, y_scale
+
+    @staticmethod
+    def _post_process_digital_bits(sources, source, source_data, x_scale, bit):
+        """Post processes digital channel data as separate bits"""
+
+        bit_channel = "{}_D{}".format(source.split("_")[0], bit)
+
+        # if the bit channel is available, decompose the data
+        if bit_channel in sources:
+            bit_data = [(i >> (2 * bit)) & 1 for i in source_data]
+            return bit_channel, bit_data, x_scale, None
+
+        # Nothing to decompose
+        else:
+            return None
+
+    @staticmethod
+    def _post_process_digital_byte(source, source_data, x_scale):
+        """Post processes digital channel data as a byte"""
+        digital = []
+        for i in source_data:
+            a = (
+                (i & 0x4000) >> 7
+                | (i & 0x1000) >> 6
+                | (i & 0x400) >> 5
+                | (i & 0x100) >> 4
+                | (i & 0x40) >> 3
+                | (i & 0x10) >> 2
+                | (i & 0x4) >> 1
+                | i & 0x1
+            )
+            digital.append(a)
+        return source.split("_")[0], digital, x_scale, None
+
+    def _get_data(self, instr, sources, use_pbar, decompose_dch):
+        """Returns an iterator that yields the source data from the oscilloscope"""
+
+        jobs = self._make_jobs(instr, sources)
+        pbar_disabled = not use_pbar
+
+        # remember the state of the acquisition system and then stop acquiring waveforms
+        acq_state = instr.query("ACQuire:STATE?").strip()
+        instr.write("ACQuire:STATE STOP")
+
+        # Calculate the total number of bytes of data to be downloaded from the instrument
+        bytes_per_sample = {"FPBinary": 4, "RIBinary": 2}
+        total_bytes = reduce(
+            lambda a, b: a + b,
+            [bytes_per_sample[jobs[i].encoding] * jobs[i].record_length for i in jobs],
+        )
+
+        with tqdm(
+            desc="Downloading",
+            unit="B",
+            total=total_bytes,
+            disable=pbar_disabled,
+            unit_scale=True,
+        ) as t:
+
+            # Patch the instr object with a custom methods that implement tqdm updates
+            instr.read_bytes_tqdm = types.MethodType(
+                read_bytes_with_tqdm(tqdm_obj=t), instr
+            )
+            instr._raw_read_tqdm = types.MethodType(
+                _raw_read_with_tqdm(tqdm_obj=t), instr
+            )
+            instr.read_binary_values = types.MethodType(
+                read_binary_values_with_custom_read_methods(
+                    read_bytes_method=instr.read_bytes_tqdm,
+                    _raw_read_method=instr._raw_read_tqdm,
+                ),
+                instr,
+            )
+
+            for source in jobs:
+
+                self._setup_curve_query(instr, source, jobs)
+
+                # extract the job parameters
+                wave_type, channel, encoding, bit_nr, datatype, rec_len = jobs[source]
 
                 # Horizontal scale information
                 x_scale = self._get_xscale(instr)
@@ -210,48 +305,27 @@ class TekSeriesCurveFeat(base.FeatureBase):
                         datatype=datatype, is_big_endian=True, expect_termination=True
                     )
 
-                    # Normal analog channels must have the vertical scale and offset applied
-                    if wave_type is WaveType.ANALOG:
-                        offset = float(instr.query("WFMOutpre:YZEro?"))
-                        scale = float(instr.query("WFMOutpre:YMUlt?"))
-                        source_data = [scale * i + offset for i in source_data]
-
-                    # Format and return the result
                     if wave_type is WaveType.DIGITAL:
 
                         # Digital channel to be decomposed into separate bits
                         if decompose_dch:
                             for bit in range(8):
-                                bit_channel = "{}_D{}".format(source.split("_")[0], bit)
-
-                                # if the bit channel is available, decompose the data
-                                if bit_channel in sources:
-                                    bit_data = [
-                                        (i >> (2 * bit)) & 1 for i in source_data
-                                    ]
-                                    yield bit_channel, bit_data, x_scale, None
+                                result = self._post_process_digital_bits(
+                                    sources, source, source_data, x_scale, bit
+                                )
+                                if result:
+                                    yield result
 
                         # Digital channel to be converted into an 8-bit word
                         else:
-                            digital = []
-                            for i in source_data:
-                                a = (
-                                    (i & 0x4000) >> 7
-                                    | (i & 0x1000) >> 6
-                                    | (i & 0x400) >> 5
-                                    | (i & 0x100) >> 4
-                                    | (i & 0x40) >> 3
-                                    | (i & 0x10) >> 2
-                                    | (i & 0x4) >> 1
-                                    | i & 0x1
-                                )
-                                digital.append(a)
-                                yield source.split("_")[0], digital, x_scale, None
+                            yield self._post_process_digital_byte(
+                                source, source_data, x_scale
+                            )
 
                     elif wave_type is WaveType.ANALOG:
-                        # Include y-scale information with analog channel waveforms
-                        y_scale = self._get_yscale(instr, source)
-                        yield source, source_data, x_scale, y_scale
+                        yield self._post_process_analog(
+                            instr, source, source_data, x_scale
+                        )
 
                     elif wave_type is WaveType.MATH:
                         # Y-scale information for MATH channels is not supported at this time
@@ -272,7 +346,7 @@ class TekSeriesSetupFeat(base.FeatureBase):
         Sets or gets the setup configuration from the instrument as a string.
         """
         with self.resource_manager.open_resource(self.resource_name) as inst:
-            inst.timeout = 20000    # this can take a while, so use a 20 second timeout
+            inst.timeout = 20000  # this can take a while, so use a 20 second timeout
             if settings:
                 inst.write("{:s}".format(settings))
                 inst.query("*OPC?")
