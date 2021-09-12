@@ -36,7 +36,7 @@ The Oscilloscope object provides a high-level API that simplifies getting data f
     Identity(company='TEKTRONIX', model='MSO58', serial='Q200011', config='CF:91.1CT FV:1.12.5.5575')
     
     >>> wave_collection = oscope.curve()    # download waveform data from the instrument
-    Downloading: 100%|█████████████████████████████████| 11/11 [00:00<00:00, 34.05Wfm/s]
+    Downloading:  20%|██        | 65.0M/320M [00:05<00:19, 12.9MB/s]
 
     >>> oscope.default_setup()              # restore the instrument's default settings
 
@@ -80,10 +80,11 @@ Other potential high level features are possible...
 ## Requirements
 
 - Python: 
-    - 3.5+
+    - 3.7+
 - 3rd Party Modules:
     - pyvisa 1.9.1      Python VISA interface library
     - visadore          Visadore plugin manager
+    - tqdm 4.62.2       Progress bar
 
 ## Installation
 
@@ -95,7 +96,7 @@ See the [Source section](#source-section) below for instructions on how to make 
 Using pip, install the package module directly from a source distribution tarball in the Windows and Linux environments.
 Using this method, all 3rd-party package modules will automatically be downloaded from PyPI and installed.
 
-    $ pip install curvequery-2.0.tar.gz
+    $ pip install curvequery-x.x.x.tar.gz
 
 ## <a name="source-section"></a>Source
 
