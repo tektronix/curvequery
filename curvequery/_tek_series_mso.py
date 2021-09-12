@@ -257,9 +257,10 @@ class TekSeriesCurveFeat(base.FeatureBase):
         instr.write("ACQuire:STATE STOP")
 
         # Calculate the total number of bytes of data to be downloaded from the instrument
-        # Two (2) bytes per sample
-        total_bytes = 2 * reduce(
-            lambda a, b: a + b, [jobs[i].record_length for i in jobs]
+        bytes_per_sample = {"FPBinary": 4, "RIBinary": 2}
+        total_bytes = reduce(
+            lambda a, b: a + b,
+            [bytes_per_sample[jobs[i].encoding] * jobs[i].record_length for i in jobs],
         )
 
         with tqdm(
@@ -277,7 +278,7 @@ class TekSeriesCurveFeat(base.FeatureBase):
             instr._raw_read_tqdm = types.MethodType(
                 _raw_read_with_tqdm(tqdm_obj=t), instr
             )
-            instr.read_binary_values_tqdm = types.MethodType(
+            instr.read_binary_values = types.MethodType(
                 read_binary_values_with_custom_read_methods(
                     read_bytes_method=instr.read_bytes_tqdm,
                     _raw_read_method=instr._raw_read_tqdm,
@@ -300,7 +301,7 @@ class TekSeriesCurveFeat(base.FeatureBase):
                     instr.write("curv?")
 
                     # Read the waveform data sent by the instrument
-                    source_data = instr.read_binary_values_tqdm(
+                    source_data = instr.read_binary_values(
                         datatype=datatype, is_big_endian=True, expect_termination=True
                     )
 
