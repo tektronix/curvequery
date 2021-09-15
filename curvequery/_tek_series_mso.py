@@ -155,7 +155,7 @@ class TekSeriesCurveFeat(base.FeatureBase):
         """Scan the instrument for available sources of data construct a list of jobs"""
 
         encoding_table = {
-            WaveType.MATH: ("FPBinary", 16, "d"),
+            WaveType.MATH: ("FPBinary", 16, "f"),
             WaveType.DIGITAL: ("RIBinary", 16, "h"),
             WaveType.ANALOG: ("RIBinary", 16, "h"),
         }
