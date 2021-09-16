@@ -15,18 +15,20 @@ def pytest_addoption(parser):
         "--resource",
         action="append",
         default=[],
-        help="list of resource names to pass to test functions",
+        help="List of resource names to pass to test functions",
     )
 
 
 def pytest_generate_tests(metafunc):
     if "resource_name" in metafunc.fixturenames:
-        metafunc.parametrize("resource_name", metafunc.config.option.resource)
+        metafunc.parametrize(
+            "resource_name", metafunc.config.option.resource, scope="session"
+        )
 
 
 def osc_fixture(supported_instrument_list):
     def osc_with_supported_list(fn):
-        @pytest.fixture
+        @pytest.fixture(scope="session")
         def fixture(resource_name):
             """A fixture that returns an instrument object if the instrument is in the list
             of supported instruments.  Otherwise, the fixture will skip the test."""
