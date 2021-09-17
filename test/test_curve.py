@@ -7,19 +7,21 @@ from pytest import approx
 
 
 @pytest.fixture(scope="module")
-def curve_data_afg_50mhz_ch1_math1(all_series_osc):
-    if all_series_osc:
-        all_series_osc.default_setup()
-        all_series_osc.write("HORIZONTAL:SCALE 4e-9")
-        all_series_osc.write("AFG:OUTPUT:STATE ON")
-        all_series_osc.write("AFG:FREQ 50e6")
-        all_series_osc.write("MATH:ADDNEW")
-        all_series_osc.write("MATH:MATH1:TYPE ADVANCED")
-        all_series_osc.write("MATH:MATH1:DEFINE '-CH1'")
-        all_series_osc.timeout = 5000
-        all_series_osc.query("*OPC?")
-        all_series_osc.write("DISPLAY:WAVEVIEW1:MATH:MATH1:VERTICAL:SCALE 100e-3")
-    return all_series_osc.curve()
+def curve_data_afg_50mhz_ch1_math1(all_series_osc_with_afg):
+    if all_series_osc_with_afg:
+        all_series_osc_with_afg.default_setup()
+        all_series_osc_with_afg.write("HORIZONTAL:SCALE 4e-9")
+        all_series_osc_with_afg.write("AFG:OUTPUT:STATE ON")
+        all_series_osc_with_afg.write("AFG:FREQ 50e6")
+        all_series_osc_with_afg.write("MATH:ADDNEW")
+        all_series_osc_with_afg.write("MATH:MATH1:TYPE ADVANCED")
+        all_series_osc_with_afg.write("MATH:MATH1:DEFINE '-CH1'")
+        all_series_osc_with_afg.timeout = 5000
+        all_series_osc_with_afg.query("*OPC?")
+        all_series_osc_with_afg.write(
+            "DISPLAY:WAVEVIEW1:MATH:MATH1:VERTICAL:SCALE 100e-3"
+        )
+    return all_series_osc_with_afg.curve()
 
 
 @pytest.mark.parametrize("target", ["CH1", "MATH1"])
