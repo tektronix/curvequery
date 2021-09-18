@@ -6,7 +6,7 @@ import pytest
 from pytest import approx
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def curve_data_afg_50mhz_ch1_math1(all_series_osc_with_afg):
     if all_series_osc_with_afg:
         all_series_osc_with_afg.default_setup()
@@ -21,15 +21,20 @@ def curve_data_afg_50mhz_ch1_math1(all_series_osc_with_afg):
         all_series_osc_with_afg.write(
             "DISPLAY:WAVEVIEW1:MATH:MATH1:VERTICAL:SCALE 100e-3"
         )
+        for _ in all_series_osc_with_afg.acquire(count=1):
+            pass
     return all_series_osc_with_afg.curve()
 
 
 @pytest.mark.parametrize("target", ["CH1", "MATH1"])
 def test_source(curve_data_afg_50mhz_ch1_math1, target):
+    """Verify the result waveform collection includes the expected sources"""
+    assert len(curve_data_afg_50mhz_ch1_math1.sources) == 2
     assert target in curve_data_afg_50mhz_ch1_math1.sources
 
 
 def test_compare_ch1_math1(curve_data_afg_50mhz_ch1_math1):
+    """Verify the sum of the two waveforms is approximately zero"""
     ch1 = curve_data_afg_50mhz_ch1_math1["CH1"].data
     math1 = curve_data_afg_50mhz_ch1_math1["MATH1"].data
     for i in (a + b for a, b in zip(ch1, math1)):
@@ -38,12 +43,14 @@ def test_compare_ch1_math1(curve_data_afg_50mhz_ch1_math1):
 
 @pytest.mark.parametrize("target", ["CH1", "MATH1"])
 def test_amplitude(curve_data_afg_50mhz_ch1_math1, target):
+    """Verify the resulting waveforms have an amplitude greater than 400 mV"""
     actual = curve_data_afg_50mhz_ch1_math1[target].data
     assert max(actual) - min(actual) > 0.4
 
 
 @pytest.mark.parametrize("target, scale", [("CH1", 0.25), ("MATH1", -0.25)])
 def test_sine_wave(curve_data_afg_50mhz_ch1_math1, target, scale):
+    """Verify the resulting waveforms contain 50 MHz waveforms"""
     actual = curve_data_afg_50mhz_ch1_math1[target].data
     step_size = 4 * pi / len(actual)
     expected = [scale * sin(step_size * i) for i in range(len(actual))]
