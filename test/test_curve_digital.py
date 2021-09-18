@@ -31,7 +31,7 @@ def decode_digital_data_counter(waveform):
     result = []
     for i, word in enumerate(waveform):
         try:
-            next_word = waveform[i+1]
+            next_word = waveform[i + 1]
 
         # No more words, so we are finished
         except IndexError:
@@ -50,7 +50,7 @@ def decode_digital_bitstream(waveform):
     result = []
     for i, bit in enumerate(waveform):
         try:
-            next_bit = waveform[i+1]
+            next_bit = waveform[i + 1]
 
         # No more words, so we are finished
         except IndexError:
@@ -76,7 +76,7 @@ def test_counter_incrementing_value(curve_data_dch_counter):
     counts = decode_digital_data_counter(wave_in)
     for i, code in enumerate(counts):
         try:
-            next_code = counts[i+1]
+            next_code = counts[i + 1]
         except IndexError:
             break
         assert (code + 1) % 0x80 == next_code
@@ -92,10 +92,8 @@ def test_counter_decomposed_frequency(curve_data_dch_counter_decompose):
         assert len(bitstream) - 2 < expected
 
 
-@pytest.mark.parametrize("target", [f"CH2_D{i}" for i in range(8)])
+@pytest.mark.parametrize("target", ["CH1"] + [f"CH2_D{i}" for i in range(8)])
 def test_counter_check_sources(curve_data_dch_counter_decompose, target):
     """Verify the resulting waveforms contain the correct sources"""
     assert len(curve_data_dch_counter_decompose.sources) == 9
     assert target in curve_data_dch_counter_decompose.sources
-
-
