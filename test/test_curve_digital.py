@@ -11,7 +11,7 @@ def curve_data_dch_counter(all_series_osc):
         all_series_osc.default_setup()
         all_series_osc.write("DISPLAY:GLOBAL:CH2:STATE 1")
         all_series_osc.write("DISPLAY:GLOBAL:CH1:STATE 0")
-        all_series_osc.write("HORIZONTAL:SCALE 20e-6")
+        all_series_osc.write("HORIZONTAL:SCALE 100e-6")
         all_series_osc.write("TRIGGER:A:EDGE:SOURCE LINE")
         for _ in all_series_osc.acquire(count=1):
             pass
@@ -24,7 +24,7 @@ def curve_data_dch_counter_decompose(all_series_osc):
         all_series_osc.default_setup()
         all_series_osc.write("DISPLAY:GLOBAL:CH2:STATE 1")
         all_series_osc.write("DISPLAY:GLOBAL:CH1:STATE 0")
-        all_series_osc.write("HORIZONTAL:SCALE 20e-6")
+        all_series_osc.write("HORIZONTAL:SCALE 100e-6")
         all_series_osc.write("TRIGGER:A:EDGE:SOURCE LINE")
         for _ in all_series_osc.acquire(count=1):
             pass
@@ -98,8 +98,8 @@ def test_counter_decomposed_frequency(curve_data_dch_counter_decompose):
         bitstream = decode_digital_bitstream(wave_data)
         expected = half_cycles_d0 / 2 ** i
         print(i)
-        assert len(bitstream) + 2 > expected
-        assert len(bitstream) - 2 < expected
+        assert len(bitstream) * 1.1 > expected
+        assert len(bitstream) * 0.9 < expected
 
 
 @pytest.mark.parametrize("target", [f"CH2_D{i}" for i in range(8)])
@@ -107,3 +107,6 @@ def test_counter_check_sources(curve_data_dch_counter_decompose, target):
     """Verify the resulting waveforms contain the correct sources"""
     assert len(curve_data_dch_counter_decompose.sources) == 8
     assert target in curve_data_dch_counter_decompose.sources
+
+
+
