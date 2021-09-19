@@ -11,7 +11,7 @@ from curvequery import api_types
 TEST_Y_SCALE_SETTINGS = [(i, j) for i in [0.1, 0.2, 0.5, 1.0, 2.0, 5.0] for j in [-5, -2.5, -1, -0.5, 0, 1, 2.5, 5]]
 
 # Horizontal Scale and Position settings for the x_scale_test
-TEST_X_SETTINGS = [(1e-6, 50), (2e-6, 50), (1e-3, 50), (1e-6, 90), (1e-6, 100), (1e-6, 10), (1e-6, 0)]
+TEST_X_SETTINGS = [(i, j) for i in [1e-6, 2e-6, 1e-3] for j in [0, 1, 50, 51, 99, 100]]
 
 
 @pytest.fixture(scope="session")
