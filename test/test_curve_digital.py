@@ -97,7 +97,6 @@ def test_counter_decomposed_frequency(curve_data_dch_counter_decompose):
         half_cycles_d0 = 2 * FREQ_D0 * wave_duration
         bitstream = decode_digital_bitstream(wave_data)
         expected = half_cycles_d0 / 2 ** i
-        print(i)
         assert len(bitstream) * 1.1 > expected
         assert len(bitstream) * 0.9 < expected
 

@@ -31,7 +31,7 @@ def curve_data_afg_50mhz_ch1_math1(all_series_osc_with_afg):
         )
         for _ in all_series_osc_with_afg.acquire(count=1):
             pass
-    return all_series_osc_with_afg.curve()
+    return all_series_osc_with_afg.curve(verbose=True)
 
 
 @pytest.mark.parametrize("target", ["CH1", "MATH1"])
@@ -76,12 +76,11 @@ def test_y_scale(all_series_osc, verticle_scale, position):
         all_series_osc.write("HORIZONTAL:MODE:RECORDLENGTH 1000")
         all_series_osc.write("TRIGGER:A:EDGE:SOURCE LINE")
         for _ in all_series_osc.acquire(count=1):
-            pass
-        actual = all_series_osc.curve()["CH1"].y_scale
-        expected_top = verticle_scale * (5 - position)
-        expected_bottom = verticle_scale * (-5 - position)
-        assert actual.top == expected_top
-        assert actual.bottom == expected_bottom
+            actual = all_series_osc.curve()["CH1"].y_scale
+            expected_top = verticle_scale * (5 - position)
+            expected_bottom = verticle_scale * (-5 - position)
+            assert actual.top == expected_top
+            assert actual.bottom == expected_bottom
 
 
 @pytest.mark.parametrize("horizontal_scale, horizontal_position", TEST_X_SETTINGS)
@@ -92,12 +91,11 @@ def test_x_scale(all_series_osc, horizontal_scale, horizontal_position):
         all_series_osc.write(f"HORIZONTAL:POSITION {horizontal_position}")
         all_series_osc.write("TRIGGER:A:EDGE:SOURCE LINE")
         for _ in all_series_osc.acquire(count=1):
-            pass
-        wave = all_series_osc.curve()["CH1"]
-        num_samples = len(wave.data)
-        actual = wave.x_scale
-        expected_slope = 10 * horizontal_scale / num_samples
-        expected_offset = -10 * horizontal_scale * horizontal_position / 100
-        print(horizontal_scale, horizontal_position)
-        assert actual.slope == approx(expected_slope, rel=1e-3)
-        assert actual.offset == approx(expected_offset, rel=1e-3, abs=1e-3)
+            wave = all_series_osc.curve()["CH1"]
+            num_samples = len(wave.data)
+            actual = wave.x_scale
+            expected_slope = 10 * horizontal_scale / num_samples
+            expected_offset = -10 * horizontal_scale * horizontal_position / 100
+            print(horizontal_scale, horizontal_position)
+            assert actual.slope == approx(expected_slope, rel=1e-3)
+            assert actual.offset == approx(expected_offset, rel=1e-3, abs=1e-3)
