@@ -82,7 +82,7 @@ Other potential high level features are possible...
 When using the curve feature, the progress bar is enabled by default, and it displays the number of bytes 
 associated with the curve query.
 
-  Downloading:  20%|██        | 65.0M/320M [00:05<00:19, 12.9MB/s]
+    Downloading:  20%|██        | 65.0M/320M [00:05<00:19, 12.9MB/s]
 
 ## Requirements
 
