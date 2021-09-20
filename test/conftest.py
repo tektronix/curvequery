@@ -34,7 +34,9 @@ def pytest_generate_tests(metafunc):
         )
     if "skip_license_checks" in metafunc.fixturenames:
         metafunc.parametrize(
-            "skip_license_checks", [metafunc.config.option.skip_license_checks], scope="session"
+            "skip_license_checks",
+            [metafunc.config.option.skip_license_checks],
+            scope="session",
         )
 
 

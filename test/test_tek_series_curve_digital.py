@@ -106,6 +106,3 @@ def test_counter_check_sources(curve_data_dch_counter_decompose, target):
     """Verify the resulting waveforms contain the correct sources"""
     assert len(curve_data_dch_counter_decompose.sources) == 8
     assert target in curve_data_dch_counter_decompose.sources
-
-
-
