@@ -77,18 +77,31 @@ Other potential high level features are possible...
     >>> id = oscope.add("meas", source="ch1", measurement="risetime")  # potential future feature
     >>> measurements = oscope.meas()                                   # potential future feature
 
+## Progress Bar
+
+When using the curve feature, the progress bar is enabled by default, and it displays the number of bytes 
+associated with the curve query.
+
+  Downloading:  20%|██        | 65.0M/320M [00:05<00:19, 12.9MB/s]
+
 ## Requirements
+
+The following Python elements are required. 
 
 - Python: 
     - 3.7+
 - 3rd Party Modules:
-    - pyvisa 1.9.1      Python VISA interface library
-    - visadore          Visadore plugin manager
-    - tqdm 4.62.2       Progress bar
+    - pyvisa == 1.11.3   Python VISA interface library
+    - visadore           Visadore plugin manager
+    - tqdm >= 4.62.2     Progress bar
+
+To improve the progress bar support, the curve query package monkey patches pyvisa at runtime; therefore, 
+a specific version of pyvisa (shown above) must be used. 
+The installer will ensure that the required version of pyvisa is used.
 
 ## Installation
 
-The curvequery package can be installed from source.
+The curve query package can be installed from source.
 
 #### Installation from Source
 
@@ -100,4 +113,4 @@ Using this method, all 3rd-party package modules will automatically be downloade
 
 ## <a name="source-section"></a>Source
 
-The source code for curvequery is available on GitHub.
+The source code for curve query is available on GitHub.
