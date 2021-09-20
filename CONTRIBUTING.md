@@ -99,7 +99,7 @@ Finally, test your new feature.
     >>> oscope.setup()
     '*RST;:PARAMBATCHING 0;:TRIGGER:AUXLEVEL 0.0E+0;:CH1:BANDWIDTH 1.0000E+9;:CH... '
 
-## Pytest Support
+## Tests
 
 A number of tests are available to verify functionality of the package module.
 All tests are stored in the ./test/ directory.
