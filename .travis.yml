@@ -4,4 +4,3 @@ python:
 # command to run build
 script:
   - python setup.py sdist
-  - pytest
