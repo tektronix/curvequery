@@ -5,8 +5,6 @@ from math import fabs
 import pytest
 from pytest import approx
 
-from curvequery import api_types
-
 # Verticle Scale and Position setting combinations for the y_scale test
 TEST_Y_SCALE_SETTINGS = [
     (i, j)

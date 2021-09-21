@@ -41,7 +41,7 @@ def pytest_generate_tests(metafunc):
 
 
 def osc_fixture(supported_instrument_list, license_check_funcs):
-    def osc_with_supported_list_and_license(fn):
+    def osc_with_supported_list_and_license(_):
         @pytest.fixture(scope="session")
         def fixture(resource_name, skip_license_checks):
             """A fixture that returns an instrument object if the instrument is in the list
