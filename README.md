@@ -105,12 +105,20 @@ The curve query package can be installed from source.
 
 #### Installation from Source
 
-See the [Source section](#source-section) below for instructions on how to make a source distribution tarball.
-Using pip, install the package module directly from a source distribution tarball in the Windows and Linux environments.
-Using this method, all 3rd-party package modules will automatically be downloaded from PyPI and installed.
+To install curve query, first clone the source repository from GitHub.
+Using pip, install the package module directly from a clone of the git repository in either the Windows 
+and Linux environments.
 
-    $ pip install curvequery-x.x.x.tar.gz
+    ../curvequery> python -m pip install .
 
-## <a name="source-section"></a>Source
+Alternatively, create a wheel file using pip, and use the wheel file to install curve query on a different 
+Windows or Linux computer.
+
+    ../curvequery> python -m pip wheel .
+
+Using either of these methods, all 3rd-party package modules will automatically be downloaded from PyPI 
+and installed.
+
+## Source
 
 The source code for curve query is available on GitHub.
