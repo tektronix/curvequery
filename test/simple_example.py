@@ -14,3 +14,5 @@ settings = osc.setup()
 osc.default_setup()
 sleep(5)
 osc.setup(settings)
+
+print()
