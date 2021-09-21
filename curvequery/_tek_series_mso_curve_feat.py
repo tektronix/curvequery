@@ -193,10 +193,6 @@ class TekSeriesCurveFeat(base.FeatureBase):
             bit_data = [(i >> (2 * bit)) & 1 for i in source_data]
             return bit_channel, bit_data, x_scale, None
 
-        # Nothing to decompose
-        else:
-            return None
-
     @staticmethod
     def _post_process_digital_byte(source, source_data, x_scale):
         """Post processes digital channel data as a byte"""
