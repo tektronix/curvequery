@@ -1,5 +1,5 @@
 # CONTRIBUTING
-Thank you for contributing to the curvequery package.  In order to improve 
+Thank you for contributing to the curve query package.  In order to improve 
 readability, please review and adhere to the following guidelines when contributing 
 to this project.
 
@@ -17,6 +17,15 @@ Specific exceptions to the PEP 8 guidelines are:
 
 This project adheres to the naming conventions described in the Google Style Python 
 Guide [Section 3.16](http://google.github.io/styleguide/pyguide.html#316-naming).  
+
+## Pre-Commit Hooks
+
+This project uses the pre-commit package to implement pre-commit hooks that run black and flake8.
+Either install the pre-commit hooks...
+
+    ../curvequery> pre-commit install
+
+...or run black and flake8 manually before commit changes.
 
 ## Adding New Features
 
@@ -99,18 +108,19 @@ Finally, test your new feature.
     >>> oscope.setup()
     '*RST;:PARAMBATCHING 0;:TRIGGER:AUXLEVEL 0.0E+0;:CH1:BANDWIDTH 1.0000E+9;:CH... '
 
-## Tests
+## Development Environment
 
-A number of tests are available to verify functionality of the package module.
+When contributing to the project, additional packages are required.
+Also, a number of tests are available to verify functionality of the package module.
 All tests are stored in the ./test/ directory.
 
-__Setting Up the Test Environment__
+__Setting Up the Development Environment__
 
-The test environment can be setup in your virtual environment using the following command.
+The development specific packages can be setup in your virtual environment using the following command.
 
-    ..\curvequery> python -m pip install .[test]
+    ..\curvequery> python -m pip install .[dev]
 
-__Running the Tests__
+__Running Tests__
 
 The command to run the entire test suite is shown below:
 
@@ -139,7 +149,7 @@ The digital bits must be connected to the TLP058 probe as shown below.
 * CH2_D6 - Bit 7 (msb)
 * CH2_D7 - Bit 0 (lsb)
 
-__Hardware Setup__
+__Hardware Setup for Tests__
 
 On the oscilloscope, connect the AFG output to CH1 using the BNC cable. 
 Connect the TLP058 to CH2 of the oscilloscope. 
