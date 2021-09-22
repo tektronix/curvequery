@@ -17,7 +17,6 @@ It is a layer of functionality built on top of the PyVISA package and the Visado
 
 Maintainer: [Chad Stryker](https://github.com/cwstryker)
 
-
 ## Usage
 
 Creating a connection to the mixed signal oscilloscope is easy.
