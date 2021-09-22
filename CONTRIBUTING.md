@@ -99,6 +99,61 @@ Finally, test your new feature.
     >>> oscope.setup()
     '*RST;:PARAMBATCHING 0;:TRIGGER:AUXLEVEL 0.0E+0;:CH1:BANDWIDTH 1.0000E+9;:CH... '
 
+## Tests
+
+A number of tests are available to verify functionality of the package module.
+All tests are stored in the ./test/ directory.
+
+__Setting Up the Development Environment__
+
+The test environment can be setup in your virtual environment using the following command.
+
+    ..\curvequery> python -m pip install .[dev]
+
+__Running the Tests__
+
+The command to run the entire test suite is shown below:
+
+    ..\curvequery> pytest --resource VISA::RESOURCE::NAME
+
+Given the nature of this package module, the tests require an external hardware target.
+The following hardware was used to develop the test suite:
+* MSO 5 Series Oscilloscope with an AFG license
+* 3 foot BNC Cable
+* TLP058 Logic Analyzer Probe
+* MDO Demo 1 Board (020-3087-00 demo kit)
+
+If an AFG license is not available, and external 50 MHz sine wave generator can be used.
+The generator settings are 1 volt peak-to-peak (into a 1 megaohm input) and zero volts offset.
+When invoking the test suite, add the "--skip-license-checks" option.
+
+If a MDO Demo 1 Board is not available, you can use another data source that can implement an 8-bit counter.
+The least significant bit of the 8-bit counter must oscillate at a frequency of 1.25 MHz.
+The digital bits must be connected to the TLP058 probe as shown below.
+* CH2_D0 - Bit 1
+* CH2_D1 - Bit 2
+* CH2_D2 - Bit 3
+* CH2_D3 - Bit 4
+* CH2_D4 - Bit 5
+* CH2_D5 - Bit 6
+* CH2_D6 - Bit 7 (msb)
+* CH2_D7 - Bit 0 (lsb)
+
+__Hardware Setup__
+
+On the oscilloscope, connect the AFG output to CH1 using the BNC cable. 
+Connect the TLP058 to CH2 of the oscilloscope. 
+The other end of the logic analyzer probe connects to the MDO Demo 1 Board.
+
+__Pre-Commit Hooks__
+
+This project uses the pre-commit package to implement pre-commit hooks that run black and flake8.
+Either install the pre-commit hooks...
+
+    ../curvequery> pre-commit install
+
+...or run black and flake8 manually before commit changes.
+
 ## Contributor License Agreement
 Contributions to this project must be accompanied by a Contributor License Agreement. You (or 
 your employer) retain the copyright to your contribution; this simply gives us permission to use 

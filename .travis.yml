@@ -4,3 +4,4 @@ python:
 # command to run build
 script:
   - python setup.py sdist
+  - python -m pip wheel .

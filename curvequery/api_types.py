@@ -42,8 +42,3 @@ class WaveformCollection:
 
     def __len__(self):
         return len(self.data.keys())
-
-
-def _disabled_pbar(iterable, *args, **kwargs):
-    for i in iterable:
-        yield i

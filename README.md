@@ -4,11 +4,10 @@
 The easy way to download curves from an oscilloscope.
 
 <p align="center">
-<a href="https://www.python.org"><img alt="Python: 3.4+" src="https://img.shields.io/badge/Python-3.4+-Green.svg"></a>
+<a href="https://www.python.org"><img alt="Python: 3.7+" src="https://img.shields.io/badge/Python-3.7+-Green.svg"></a>
 <a href="https://github.com/psf/black"><img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-000000.svg"></a>
 <a href="https://www.codefactor.io/repository/github/tektronix/curvequery"><img src="https://www.codefactor.io/repository/github/tektronix/curvequery/badge" alt="CodeFactor" /></a>
 <a href="https://lgtm.com/projects/g/tektronix/curvequery/alerts/"><img alt="Total alerts" src="https://img.shields.io/lgtm/alerts/g/tektronix/curvequery.svg?logo=lgtm&logoWidth=18"/></a>
-<a href="https://github.com/tektronix"><img alt="Tektronix" src="https://tektronix.github.io/media/TEK-opensource_badge.svg"></a> 
 </p>
 
 ## Description
@@ -77,27 +76,48 @@ Other potential high level features are possible...
     >>> id = oscope.add("meas", source="ch1", measurement="risetime")  # potential future feature
     >>> measurements = oscope.meas()                                   # potential future feature
 
+## Progress Bar
+
+When using the curve feature, the progress bar is enabled by default, and it displays the number of bytes 
+associated with the curve query.
+
+    Downloading:  20%|██        | 65.0M/320M [00:05<00:19, 12.9MB/s]
+
 ## Requirements
+
+The following Python elements are required. 
 
 - Python: 
     - 3.7+
 - 3rd Party Modules:
-    - pyvisa 1.9.1      Python VISA interface library
-    - visadore          Visadore plugin manager
-    - tqdm 4.62.2       Progress bar
+    - pyvisa == 1.11.3   Python VISA interface library
+    - visadore           Visadore plugin manager
+    - tqdm >= 4.62.2     Progress bar
+
+To improve the progress bar support, the curve query package monkey patches pyvisa at runtime; therefore, 
+a specific version of pyvisa (shown above) must be used. 
+The installer will ensure that the required version of pyvisa is used.
 
 ## Installation
 
-The curvequery package can be installed from source.
+The curve query package can be installed from source.
 
 #### Installation from Source
 
-See the [Source section](#source-section) below for instructions on how to make a source distribution tarball.
-Using pip, install the package module directly from a source distribution tarball in the Windows and Linux environments.
-Using this method, all 3rd-party package modules will automatically be downloaded from PyPI and installed.
+To install curve query, first clone the source repository from GitHub.
+Using pip, install the package module directly from a clone of the git repository in either the Windows 
+and Linux environments.
 
-    $ pip install curvequery-x.x.x.tar.gz
+    ../curvequery> python -m pip install .
 
-## <a name="source-section"></a>Source
+Alternatively, create a wheel file using pip, and use the wheel file to install curve query on a different 
+Windows or Linux computer.
 
-The source code for curvequery is available on GitHub.
+    ../curvequery> python -m pip wheel .
+
+Using either of these methods, all 3rd-party package modules will automatically be downloaded from PyPI 
+and installed.
+
+## Source
+
+The source code for curve query is available on GitHub.
