@@ -39,7 +39,6 @@ class WaveformCollection:
 
     def __getitem__(self, item):
         return self.data[item]
-
     def __len__(self):
         return len(self.data.keys())
 
