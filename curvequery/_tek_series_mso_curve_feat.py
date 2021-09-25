@@ -12,15 +12,16 @@ from .api_types import Waveform
 from ._tek_series_mso import WaveType
 from ._tek_series_mso import JobParameters
 from ._tek_series_mso import get_event_queue
-from ._pyvisa_tqdm_patch import _raw_read_with_tqdm
-from ._pyvisa_tqdm_patch import read_binary_values_with_custom_read_methods
-from ._pyvisa_tqdm_patch import read_bytes_with_tqdm
+from ._pyvisa_tqdm_patch import _read_raw_progress_bar
+from ._pyvisa_tqdm_patch import read_binary_values_progress_bar
+from ._pyvisa_tqdm_patch import read_bytes_progress_bar
 
 
 class TekSeriesCurveFeat(base.FeatureBase):
     def feature(self, *, use_pbar=True, decompose_dch=True, verbose=False):
         """
-        Returns a WaveformCollection object containing waveform data available on the instrument.
+        Returns a WaveformCollection object containing waveform data available on the
+        instrument.
 
         Parameters:
             use_pbar (bool): Optionally display a progress bar. (default: False)
@@ -58,7 +59,8 @@ class TekSeriesCurveFeat(base.FeatureBase):
     def _has_data_available(instr, source):
         """Checks that the source seems to have actual data available for download.
         This function should be called before performing a curve query."""
-        # Use "display:global:CH{x}:state?" to determine if the channel is displayed and available for download
+        # Use "display:global:CH{x}:state?" to determine if the channel is displayed
+        # and available for download
         if source == "NONE":
             display_on = False
         else:
@@ -71,8 +73,8 @@ class TekSeriesCurveFeat(base.FeatureBase):
     def _get_xscale(instr):
         """Get the horizontal scale of the instrument"""
 
-        # This function will generate a VISA timeout if there is no waveform data available
-        # and the channel is enabled.
+        # This function will generate a VISA timeout if there is no waveform data
+        # available and the channel is enabled.
         try:
             xincr = instr.query("WFMOutpre:XINCR?").strip()
         except pyvisa.errors.VisaIOError:
@@ -114,7 +116,8 @@ class TekSeriesCurveFeat(base.FeatureBase):
             i for i in available_channels if self._has_data_available(instr, i)
         ]
 
-        # Return only waveforms that are available and have a corresponding useful channel
+        # Return only waveforms that are available and have a corresponding useful
+        # channel
         useful_waveforms = [
             i for i in available_waveforms if i.split("_")[0] in useful_channels
         ]
@@ -221,7 +224,8 @@ class TekSeriesCurveFeat(base.FeatureBase):
         acq_state = instr.query("ACQuire:STATE?").strip()
         instr.write("ACQuire:STATE STOP")
 
-        # Calculate the total number of bytes of data to be downloaded from the instrument
+        # Calculate the total number of bytes of data to be downloaded from the
+        # instrument
         bytes_per_sample = {"FPBinary": 4, "RIBinary": 2}
         total_bytes = reduce(
             lambda a, b: a + b,
@@ -237,17 +241,15 @@ class TekSeriesCurveFeat(base.FeatureBase):
         ) as t:
 
             # Patch the instr object with a custom methods that implement tqdm updates
-            instr.read_bytes_tqdm = types.MethodType(
-                read_bytes_with_tqdm(tqdm_obj=t), instr
+            instr.progress_bar = t
+            instr.read_bytes_progress_bar = types.MethodType(
+                read_bytes_progress_bar, instr
             )
-            instr._raw_read_tqdm = types.MethodType(
-                _raw_read_with_tqdm(tqdm_obj=t), instr
+            instr._read_raw_progress_bar = types.MethodType(
+                _read_raw_progress_bar, instr
             )
-            instr.read_binary_values = types.MethodType(
-                read_binary_values_with_custom_read_methods(
-                    read_bytes_method=instr.read_bytes_tqdm,
-                    _raw_read_method=instr._raw_read_tqdm,
-                ),
+            instr.read_binary_values_progress_bar = types.MethodType(
+                read_binary_values_progress_bar,
                 instr,
             )
 
@@ -266,7 +268,7 @@ class TekSeriesCurveFeat(base.FeatureBase):
                     instr.write("curv?")
 
                     # Read the waveform data sent by the instrument
-                    source_data = instr.read_binary_values(
+                    source_data = instr.read_binary_values_progress_bar(
                         datatype=datatype, is_big_endian=True, expect_termination=True
                     )
 
@@ -293,7 +295,8 @@ class TekSeriesCurveFeat(base.FeatureBase):
                         )
 
                     elif wave_type is WaveType.MATH:
-                        # Y-scale information for MATH channels is not supported at this time
+                        # Y-scale information for MATH channels is not supported at
+                        # this time
                         yield source, source_data, x_scale, None
 
                     else:
