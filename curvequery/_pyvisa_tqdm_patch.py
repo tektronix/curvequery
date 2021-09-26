@@ -13,13 +13,12 @@ from pyvisa import logger
 from pyvisa import util
 
 
-"""This file contains modified versions of methods from the pyvisa package
-module. The modifications enable support for the tqdm progress bar. These
-methods are dynamically patched (isn't Python wonderful) into a message-based
-instrument object by the _get_data() method of the Curve Query feature.
-
-This code was copied from pyvisa version 1.11.3.
-"""
+# This file contains modified versions of methods from the pyvisa package
+# module. The modifications enable support for the tqdm progress bar. These
+# methods are dynamically patched (isn't Python wonderful) into a message-based
+# instrument object by the _get_data() method of the Curve Query feature.
+#
+# This code was copied from pyvisa version 1.11.3.
 
 
 def read_bytes_progress_bar(
